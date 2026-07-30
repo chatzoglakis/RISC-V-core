@@ -6,7 +6,7 @@ use IEEE.NUMERIC_STD.ALL;
 entity ram is
     generic (
         DATA_WIDTH: integer := 8;
-        ADDRESS_WIDTH: integer := 14 --16KB
+        ADDRESS_WIDTH: integer := 14 --16KB total memory size
     );
 
     port(
