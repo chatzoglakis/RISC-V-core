@@ -13,7 +13,7 @@ entity alu is
     );
 end alu;
 
-architecture Behavioral of alu is
+architecture rtl of alu is
 
 begin
     process(all)
