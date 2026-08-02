@@ -17,7 +17,7 @@ entity ram is
     );
 end ram;
 
-architecture rtl of ram is
+architecture Behavioral of ram is
 
     type ram_type is array(0 to (2**ADDRESS_WIDTH)-1) of STD_LOGIC_VECTOR(31 downto 0);
     signal ram: ram_type;
