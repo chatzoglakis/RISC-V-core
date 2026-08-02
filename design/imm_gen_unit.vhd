@@ -9,7 +9,7 @@ entity imm_gen_unit is
     );
 end imm_gen_unit;
 
-architecture Behavioral of imm_gen_unit is
+architecture rtl of imm_gen_unit is
 
 begin
     
