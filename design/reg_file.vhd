@@ -20,7 +20,7 @@ entity reg_file is
     );
 end reg_file;
 
-architecture Behavioral of reg_file is
+architecture rtl of reg_file is
 
     type reg_array_type is array (0 to (2**ADDRESS_WIDTH) - 1) of STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0);
     signal reg_file: reg_array_type;
