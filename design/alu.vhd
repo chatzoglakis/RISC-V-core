@@ -9,32 +9,16 @@ entity alu is
         op: in STD_LOGIC_VECTOR(2 downto 0);
         sub_arShift: in STD_LOGIC; --when 1: 000 = sub and 101 = sra, when 0: 000 = add and 101 = srl
         shamt: in STD_LOGIC_VECTOR(4 downto 0);
-        signed_comp: in STD_LOGIC;
-        result: out STD_LOGIC_VECTOR(31 downto 0);
-        less_than_flag: out STD_LOGIC --used in subtraction to determine if a < b or b >= a (helpful for branch instructions)
+        result: out STD_LOGIC_VECTOR(31 downto 0)
     );
 end alu;
 
 architecture rtl of alu is
 
-    --Signals used to calculate the value of the less_than_flag
-    signal a_ext: STD_LOGIC_VECTOR(32 downto 0);
-    signal b_ext: STD_LOGIC_VECTOR(32 downto 0);
-    signal intermediate_result: STD_LOGIC_VECTOR(32 downto 0);
-
 begin
     process(all)
     begin
         result <= (others => '0');
-        less_than_flag <= '0';
-        
-        if signed_comp = '1' then
-            a_ext <= a(31) & a;
-            b_ext <= b(31) & b;
-        else
-            a_ext <= '0' & a;
-            b_ext <= '0' & b;
-        end if;
 
         case op is
 
@@ -42,9 +26,7 @@ begin
                 if sub_ArShift = '0' then
                     result <= std_logic_vector(unsigned(a) + unsigned(b));
                 else
-                    intermediate_result <= std_logic_vector(signed(a_ext) - signed(b_ext));
-                    less_than_flag <= intermediate_result(31);
-                    result <= intermediate_result(31 downto 0);
+                    result <= std_logic_vector(unsigned(a) - unsigned(b));
                 end if;
             
             when "001" => --SLL
@@ -78,3 +60,4 @@ begin
         end process;
             
 end rtl;
+
