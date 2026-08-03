@@ -13,9 +13,7 @@ architecture Behavioral of alu_tb is
     signal op: STD_LOGIC_VECTOR(2 downto 0);
     signal sub_arShift: STD_LOGIC; 
     signal shamt: STD_LOGIC_VECTOR(4 downto 0);
-    signal signed_comp: STD_LOGIC;
     signal result: STD_LOGIC_VECTOR(31 downto 0);
-    signal less_than_flag: STD_LOGIC;
 
 begin
     dut: entity work.alu
@@ -25,9 +23,7 @@ begin
             op => op,
             sub_arShift => sub_arShift,
             shamt => shamt,
-            signed_comp => signed_comp,
-            result => result,
-            less_than_flag => less_than_flag
+            result => result
         );
 
     stimuli: process
@@ -41,13 +37,10 @@ begin
         wait for 50 ns;
         assert result = x"00000003" report "ADDITION FAILED" severity error;
 
-        report "testing subtraction and comparison";
+        report "testing subtraction";
         sub_arShift <= '1';
-        signed_comp <= '0';
         wait for 50 ns;
         assert result = x"FFFFFFFF" report "SUBTRACTION FAILED" severity error;
-        assert less_than_flag = '1' report "LESS THAN FLAG FAILED" severity error;
-
 
         report "testing logical shift left";
         op <= "001";
@@ -103,4 +96,3 @@ begin
     end process;
 
 end Behavioral;
-
