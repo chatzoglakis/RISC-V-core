@@ -2,6 +2,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
+
 entity reg_file is
     generic (
         ADDRESS_WIDTH: integer := 5;
@@ -15,8 +16,8 @@ entity reg_file is
         rd: in STD_LOGIC_VECTOR(ADDRESS_WIDTH-1 downto 0);
         we: in STD_LOGIC;
         data_in: in STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0);
-        data_out1: out STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0);
-        data_out2: out STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0)
+        reg_out1: out STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0);
+        reg_out2: out STD_LOGIC_VECTOR(DATA_WIDTH-1 downto 0)
     );
 end reg_file;
 
@@ -27,8 +28,8 @@ architecture rtl of reg_file is
 
 begin
 
-    data_out1 <= reg_file(to_integer(unsigned(rs1)));
-    data_out2 <= reg_file(to_integer(unsigned(rs2)));
+    reg_out1 <= reg_file(to_integer(unsigned(rs1)));
+    reg_out2 <= reg_file(to_integer(unsigned(rs2)));
 
     process(clk)
     begin
@@ -39,4 +40,6 @@ begin
         end if;
     end process;
 
+
 end rtl;
+
