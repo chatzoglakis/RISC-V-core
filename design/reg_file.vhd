@@ -28,13 +28,17 @@ architecture rtl of reg_file is
 
 begin
 
-    reg_out1 <= reg_file(to_integer(unsigned(rs1)));
-    reg_out2 <= reg_file(to_integer(unsigned(rs2)));
+    reg_out1 <= (others => '0') when unsigned(rs1) = 0
+            else reg_file(to_integer(unsigned(rs1)));
+
+    reg_out2 <= (others => '0') when unsigned(rs2) = 0
+            else reg_file(to_integer(unsigned(rs2)));
 
     process(clk)
     begin
+
         if rising_edge(clk) then
-            if we = '1' then
+            if we = '1' and unsigned(rd) /= 0 then
                 reg_file(to_integer(unsigned(rd))) <= data_in;
             end if;
         end if;
@@ -42,4 +46,3 @@ begin
 
 
 end rtl;
-
