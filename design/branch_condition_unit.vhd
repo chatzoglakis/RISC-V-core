@@ -5,6 +5,7 @@ entity branch_condition_unit is
     port(
         funct: in STD_LOGIC_VECTOR(2 downto 0);
         ALUout: in STD_LOGIC_VECTOR(31 downto 0);
+        en: in STD_LOGIC;
         take_branch: out STD_LOGIC
     );
 end branch_condition_unit;
@@ -17,7 +18,8 @@ begin
     begin
         take_branch <='0';
 
-        case funct is
+        if en = '0' then
+            case funct is
             when "000" | "101" | "111" => --BEQ, BGE, BGEU
                 if ALUout = x"00000000" then
                     take_branch <= '1';
@@ -30,6 +32,7 @@ begin
                 
             when others => take_branch <= '0';
 
-        end case;
+            end case;
+        end if;
     end process;
 end rtl;
