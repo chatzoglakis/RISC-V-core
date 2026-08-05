@@ -3,7 +3,7 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 entity branch_condition_unit is
     port(
-        funct: in STD_LOGIC_VECTOR(2 downto 0);
+        funct3: in STD_LOGIC_VECTOR(2 downto 0);
         ALUout: in STD_LOGIC_VECTOR(31 downto 0);
         en: in STD_LOGIC;
         take_branch: out STD_LOGIC
@@ -19,7 +19,7 @@ begin
         take_branch <='0';
 
         if en = '0' then
-            case funct is
+            case funct3 is
             when "000" | "101" | "111" => --BEQ, BGE, BGEU
                 if ALUout = x"00000000" then
                     take_branch <= '1';
