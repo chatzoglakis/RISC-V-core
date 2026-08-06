@@ -18,7 +18,12 @@ begin
     begin
         take_branch <='0';
 
-        if en = '0' then
+        if en = '1' then
+            -- ">=" and "<" comparisons use slt and sltu operations to determine if branch should be taken, BNE and BEQ use subtraction
+            -- That means that when slt/ sltu returns 1 => rs1 < rs2, and when it returns 0 => rs1 >= rs2
+            -- when subtraction returns 0 => rs1 = rs2, when it returns non-zero number => rs1 /= rs2
+            --Therefore for greater or equal branches (BGE, BGEU) and for branch equal (BEQ) the branch is taken when the ALU output is zero
+            -- For branch not equal (BNE) and for less-than branches (BLT, BLTU), the branch is taken when the ALU output is non zero
             case funct3 is
             when "000" | "101" | "111" => --BEQ, BGE, BGEU
                 if ALUout = x"00000000" then
