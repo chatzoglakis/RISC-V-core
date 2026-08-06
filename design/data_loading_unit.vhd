@@ -5,7 +5,7 @@ use IEEE.STD_LOGIC_1164.ALL;
 entity data_loading_unit is
     port(
         data_mem_out: in STD_LOGIC_VECTOR(31 downto 0);
-        alu_out: in STD_LOGIC_VECTOR(31 downto 0);
+        byte_offset: in STD_LOGIC_VECTOR(1 downto 0);
         funct3: in STD_LOGIC_VECTOR(2 downto 0);
         mem_writeback_data: out STD_LOGIC_VECTOR(31 downto 0)
     );
@@ -16,11 +16,9 @@ architecture rtl of data_loading_unit is
 begin
 
     load_from_ram_proc: process(all)
-        variable byte_offset: STD_LOGIC_VECTOR(1 downto 0);
         variable extracted_byte : STD_LOGIC_VECTOR(7 downto 0);
         variable extracted_half : STD_LOGIC_VECTOR(15 downto 0);
     begin
-        byte_offset := alu_out(1 downto 0);
         mem_writeback_data <= data_mem_out;
 
         case funct3 is
