@@ -177,7 +177,7 @@ begin
     data_loading_unit: entity work.data_loading_unit
      port map(
         data_mem_out => data_mem_out,
-        alu_out => alu_out,
+        byte_offset => alu_out(1 downto 0),
         funct3 => instruction(14 downto 12),
         mem_writeback_data => mem_writeback_data
     );
