@@ -5,15 +5,16 @@ entity control_unit is
     port(
         instruction: in STD_LOGIC_VECTOR(31 downto 0);
         imm_sel: out STD_LOGIC_VECTOR(2 downto 0);
-        ALU_src: out STD_LOGIC; -- determines 2nd operand and shamt source of ALU: 0 = rs2, 1 = immediate
+        ALU_src1: out STD_LOGIC;-- determines 1st source of ALU: 0 = rs1, 1 = PC
+        ALU_src2: out STD_LOGIC; -- determines 2nd operand and shamt source of ALU: 0 = rs2, 1 = immediate
         branch_add_src: out STD_LOGIC; --determines branch adder's 2nd operand: 0 = rs1, 1 = PC
         branch_en: out STD_LOGIC;
         ALU_op: out STD_LOGIC_VECTOR(2 downto 0);
         sub_arShift: out STD_LOGIC;
         jump: out STD_LOGIC;
         reg_data_src: out STD_LOGIC_VECTOR(1 downto 0); -- determines data input to the reg file: 00 = ALU output, 01 = data memory output, 10 = immediate, 11 = PC
-        data_mem_we: out STD_LOGIC_VECTOR(3 downto 0);
-        reg_we: out STD_LOGIC
+        reg_we: out STD_LOGIC;
+        is_store_inst: out STD_LOGIC
     );
 end control_unit;
 
@@ -23,15 +24,16 @@ begin
     process(instruction)
     begin
         imm_sel <= "000";
-        ALU_src <= '0';
+        ALU_src1 <= '0';
+        ALU_src2 <= '0';
         branch_add_src <= '0';
         branch_en <= '0';
         ALU_op <= "000";
         sub_arShift <= '0';
         jump <= '0';
         reg_data_src <= "00";
-        data_mem_we <= "0000";
         reg_we <= '0';
+        is_store_inst <= '0';
         
         case instruction(6 downto 2) is
             when "01101" => --LUI
@@ -41,11 +43,13 @@ begin
             
             when "00101" => --AUIPC
                 imm_sel <= "011";
-                jump <= '1';
+                reg_we <= '1';
+                ALU_src1 <= '1';
+                ALU_src2 <= '1';
 
             when "00100" => --I-Type (arithmetic/logical)
                 reg_we <= '1';
-                ALU_src <= '1';
+                ALU_src2 <= '1';
                 ALU_op <= instruction(14 downto 12); --funct3 field determines ALU operation
                 
                 if instruction(14 downto 12) = "101" then
@@ -63,19 +67,13 @@ begin
             when "00000" => --I-Type (loads)
                 reg_we <= '1';
                 ALU_op <= "000";
-                ALU_src <= '1';
+                ALU_src2 <= '1';
                 reg_data_src <= "01";
 
             when "01000" => --S-Type
-                ALU_src <= '1';
+                ALU_src2 <= '1';
                 imm_sel <= "001";
-
-                case instruction(14 downto 12) is
-                    when "000" => data_mem_we <= "0001"; --Sb
-                    when "001" => data_mem_we <= "0011"; --Sh
-                    when "010" => data_mem_we <= "1111"; --sw
-                    when others => data_mem_we <= "0000";
-                end case;
+                is_store_inst <= '1';
 
             when "11011" => --JAL
                 imm_sel <= "100";
