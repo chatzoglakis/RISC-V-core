@@ -12,7 +12,7 @@ entity control_unit is
         sub_arShift: out STD_LOGIC;
         jump: out STD_LOGIC;
         reg_data_src: out STD_LOGIC_VECTOR(1 downto 0); -- determines data input to the reg file: 00 = ALU output, 01 = data memory output, 10 = immediate, 11 = PC
-        data_mem_we: out STD_LOGIC_VECTOR(4 downto 0);
+        data_mem_we: out STD_LOGIC_VECTOR(3 downto 0);
         reg_we: out STD_LOGIC
     );
 end control_unit;
@@ -78,13 +78,13 @@ begin
                 end case;
 
             when "11011" => --JAL
-                imm_sel <= "000";
+                imm_sel <= "100";
                 jump <= '1';
                 reg_we <= '1';
                 reg_data_src <= "11";
 
             when "11001" => --JALR
-                imm_sel <= "100";
+                imm_sel <= "000";
                 jump <= '1';    
                 reg_we <= '1';
                 reg_data_src <= "11";
