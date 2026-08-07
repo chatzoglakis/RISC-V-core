@@ -80,16 +80,18 @@ begin
                 jump <= '1';
                 reg_we <= '1';
                 reg_data_src <= "11";
+                branch_add_src <= '1';
 
             when "11001" => --JALR
                 imm_sel <= "000";
                 jump <= '1';    
                 reg_we <= '1';
                 reg_data_src <= "11";
-                branch_add_src <= '1';
 
             when "11000" => --B-Type
                 branch_en <= '1';
+                branch_add_src <= '1';
+                imm_sel <= "010";
 
                 case instruction(14 downto 12) is
                     when "000" | "001" => --BEQ, BNE
@@ -97,8 +99,11 @@ begin
                         sub_arShift <= '1';
 
                     when "100" | "101" => ALU_op <= "010"; --BLT, BGE
-                    when "110" | "111" => ALU_op <= "011"; --BLTU, BGEU 
+                    when "110" | "111" => ALU_op <= "011"; --BLTU, BGEU
+                    when others => null;
                 end case;
+
+            when others => null;
 
             end case;
         end process;
