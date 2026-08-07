@@ -53,7 +53,8 @@ architecture rtl of datapath is
 
 begin
 
-    pc_proc: process(clk)
+    next_pc <= STD_LOGIC_VECTOR(unsigned(pc_out) + 4);
+    pc: process(clk)
     begin
         if rising_edge(clk) then
             if rst_btn = '1' then
@@ -62,12 +63,13 @@ begin
                 pc_out <= pc_in;
             end if;
         end if;
+    end process;
 
-        next_pc <= STD_LOGIC_VECTOR(unsigned(pc_out) + 4);
-
+    pc_branch_logic: process (all)
+    begin
         if jump = '1' or take_branch = '1' then
                 if branch_add_src = '0' then --JALR
-                    pc_in <= STD_LOGIC_VECTOR(unsigned(immediate) + unsigned(reg_out1))(31 downto 1) & '0'; 
+                    pc_in <= STD_LOGIC_VECTOR(unsigned(immediate) + unsigned(reg_out1)) and x"FFFFFFFE"; --set lsb to 0
                 else --BRANCH/JAL
                     pc_in <= STD_LOGIC_VECTOR(unsigned(immediate) + unsigned(pc_out));
                 end if;
