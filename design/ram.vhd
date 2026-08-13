@@ -22,14 +22,22 @@ architecture rtl of ram is
     type ram_type is array(0 to (2**ADDRESS_WIDTH)-1) of STD_LOGIC_VECTOR(31 downto 0);
     -- Initialize the RAM with compiled machine code for testing purposes
     signal ram: ram_type := (
-        0 => x"00000093", -- PC = 0:  addi x1, x0, 0
-        1 => x"00500113", -- PC = 4:  addi x2, x0, 5
-        2 => x"00108093", -- PC = 8:  addi x1, x1, 1  <-- LOOP START
-        3 => x"02102023", -- PC = 12: sw   x1, 32(x0)
-        4 => x"fe209ce3", -- PC = 16: bne  x1, x2, -8
-        5 => x"0000006f", -- PC = 20: jal  x0, 0      <-- END PROGRAM
+        0  => x"00000093", -- PC = 0:  addi x1, x0, 0
+        1  => x"00300113", -- PC = 4:  addi x2, x0, 3
+        2  => x"00000013", -- PC = 8:  nop
+        3  => x"00000013", -- PC = 12: nop
+        4  => x"00000013", -- PC = 16: nop
+        5  => x"00108093", -- PC = 20: addi x1, x1, 1  <-- LOOP START
+        6  => x"00000013", -- PC = 24: nop
+        7  => x"00000013", -- PC = 28: nop
+        8  => x"00000013", -- PC = 32: nop
+        9  => x"06102223", -- PC = 36: sw   x1, 100(x0)
+        10 => x"00000013", -- PC = 40: nop
+        11 => x"00000013", -- PC = 44: nop
+        12 => x"00000013", -- PC = 48: nop
+        13 => x"fe2090e3", -- PC = 52: bne  x1, x2, -32 (Jump to PC 20)
+        14 => x"0000006f", -- PC = 56: jal  x0, 0      <-- END PROGRAM
         
-        -- The rest of the 16KB memory is filled with zeros
         others => x"00000000"
     );
 
