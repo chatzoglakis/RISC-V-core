@@ -2,7 +2,6 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
-
 entity datapath is
     port(
         clk: in STD_LOGIC;
@@ -12,72 +11,126 @@ end datapath;
 
 architecture rtl of datapath is
 
-    signal data_ram_we: STD_LOGIC_VECTOR(3 downto 0);
-    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
+    type IF_ID is record
+        instruction: STD_LOGIC_VECTOR(31 downto 0);
+        pc: STD_LOGIC_VECTOR(31 downto 0);
+    end record;
 
+    type ID_EX is record
 
-    signal pc_in: STD_LOGIC_VECTOR(31 downto 0);
-    signal pc_out: STD_LOGIC_VECTOR(31 downto 0);
+        pc: STD_LOGIC_VECTOR(31 downto 0);
+        rs1: STD_LOGIC_VECTOR(4 downto 0);
+        rs2: STD_LOGIC_VECTOR(4 downto 0);
+        rd: STD_LOGIC_VECTOR(4 downto 0);
+        reg_out1: STD_LOGIC_VECTOR(31 downto 0);
+        reg_out2: STD_LOGIC_VECTOR(31 downto 0);
+        immediate: STD_LOGIC_VECTOR(31 downto 0);
+        ALU_src1       : std_logic;
+        ALU_src2       : std_logic;
+        branch_add_src : std_logic;
+        branch_en      : std_logic;
+        ALU_op         : std_logic_vector (2 downto 0);
+        sub_arShift    : std_logic;
+        jump           : std_logic;
+        reg_data_src   : std_logic_vector (1 downto 0);
+        reg_we         : std_logic;
+        is_store_inst  : std_logic;
+        funct3: STD_LOGIC_VECTOR(2 downto 0);
+
+    end record;
+
+    type EX_MEM is record
+
+        pc: STD_LOGIC_VECTOR(31 downto 0);
+        reg_out1: STD_LOGIC_VECTOR(31 downto 0);
+        reg_out2: STD_LOGIC_VECTOR(31 downto 0);
+        immediate: STD_LOGIC_VECTOR(31 downto 0);
+        rd: STD_LOGIC_VECTOR(4 downto 0);
+        reg_data_src: STD_LOGIC_VECTOR(1 downto 0);
+        reg_we: STD_LOGIC;
+        is_store_inst: STD_LOGIC;
+        funct3: STD_LOGIC_VECTOR(2 downto 0);
+        alu_out: STD_LOGIC_VECTOR(31 downto 0);
+
+    end record;
+
+    type MEM_WB is record
+        pc: STD_LOGIC_VECTOR(31 downto 0);
+        rd: STD_LOGIC_VECTOR(4 downto 0);
+        reg_data_src: STD_LOGIC_VECTOR(1 downto 0);
+        reg_we: STD_LOGIC;
+        funct3: STD_LOGIC_VECTOR(2 downto 0);
+        immediate: STD_LOGIC_VECTOR(31 downto 0);
+        alu_out: STD_LOGIC_VECTOR(31 downto 0);
+        data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
+    end record;
+
+    signal IF_ID_in: IF_ID;
+    signal IF_ID_out: IF_ID;
+
+    signal ID_EX_in: ID_EX;
+    signal ID_EX_out: ID_EX;
+
+    signal EX_MEM_in : EX_MEM;
+    signal EX_MEM_out : EX_MEM;
+
+    signal MEM_WB_in: MEM_WB;
+    signal MEM_WB_out : MEM_WB;
+
+    signal pc_reg: STD_LOGIC_VECTOR(31 downto 0);
     signal next_pc: STD_LOGIC_VECTOR(31 downto 0);
 
+    signal flush_pipeline: STD_LOGIC;
+    signal branch_adder_result: STD_LOGIC_VECTOR(31 downto 0);
     signal take_branch: STD_LOGIC;
-
-    signal reg_out1: STD_LOGIC_VECTOR(31 downto 0);
-    signal reg_out2: STD_LOGIC_VECTOR(31 downto 0);
-
-    signal immediate: STD_LOGIC_VECTOR(31 downto 0);
-
+    signal alu_out: STD_LOGIC_VECTOR(31 downto 0);
+    signal imm_sel: std_logic_vector (2 downto 0);
+    signal data_ram_we: STD_LOGIC_VECTOR(3 downto 0);
+    signal ram_data_in: STD_LOGIC_VECTOR(31 downto 0);
+    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
     signal reg_data_in: STD_LOGIC_VECTOR(31 downto 0);
-
-    signal instruction    : std_logic_vector (31 downto 0);
-    signal imm_sel        : std_logic_vector (2 downto 0);
-    signal ALU_src1        : std_logic;
-    signal ALU_src2        : std_logic;
-    signal branch_add_src : std_logic;
-    signal branch_en      : std_logic;
-    signal ALU_op         : std_logic_vector (2 downto 0);
-    signal sub_arShift    : std_logic;
-    signal jump           : std_logic;
-    signal reg_data_src   : std_logic_vector (1 downto 0);
-    signal reg_we         : std_logic;
-    signal is_store_inst  : std_logic;
-
     signal alu_a: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_b: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_shamt: STD_LOGIC_VECTOR(4 downto 0);
-    signal alu_out: STD_LOGIC_VECTOR(31 downto 0);
-
-    signal data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
     signal mem_writeback_data: STD_LOGIC_VECTOR(31 downto 0);
-    signal ram_data_in: STD_LOGIC_VECTOR(31 downto 0);
 
 begin
 
-    next_pc <= STD_LOGIC_VECTOR(unsigned(pc_out) + 4);
-    pc: process(clk)
+    pipeline_registers: process(clk)
     begin
         if rising_edge(clk) then
             if rst_btn = '1' then
-                pc_out <= (others => '0');
+                pc_reg <= (others => '0');
             else
-                pc_out <= pc_in;
+                pc_reg <= next_pc;
+
+                if flush_pipeline = '1' then
+                    --If a branch is taken, the flush_pipeline signal turns on in order to remove the effect of the instructions that are on the 2 first stages of the pipline.
+                    --We overwrite the IF_ID's and ID_EX's registers write enable and jump/branch signals to 0 to turn the first 2 instructions of the pipline to NOPs
+                    --This needs to happen because this 2 instructions should not be executed due to the branch.
+                    
+                    IF_ID_out <= IF_ID_in;
+
+                    ID_EX_out <=ID_EX_in;
+                    ID_EX_out.reg_we <= '0';
+                    ID_EX_out.branch_en <= '0';
+                    ID_EX_out.jump <= '0';
+                    ID_EX_out.is_store_inst <= '0';
+
+                    EX_MEM_out <= EX_MEM_in;
+                    MEM_WB_out <= MEM_WB_in;
+                else
+                    IF_ID_out <= IF_ID_in;
+                    ID_EX_out <= ID_EX_in;
+                    EX_MEM_out <= EX_MEM_in;
+                    MEM_WB_out <= MEM_WB_in;
+                end if;
             end if;
         end if;
     end process;
 
-    pc_branch_logic: process (all)
-    begin
-        if jump = '1' or take_branch = '1' then
-                if branch_add_src = '0' then --JALR
-                    pc_in <= STD_LOGIC_VECTOR(unsigned(immediate) + unsigned(reg_out1)) and x"FFFFFFFE"; --set lsb to 0
-                else --BRANCH/JAL
-                    pc_in <= STD_LOGIC_VECTOR(unsigned(immediate) + unsigned(pc_out));
-                end if;
-        else
-                pc_in <= next_pc;
-        end if;
-    end process;
 
+    ---------- IF STAGE ----------
     instruction_ram: entity work.ram
      generic map(
         ADDRESS_WIDTH => 12
@@ -85,22 +138,14 @@ begin
      port map(
         clk => clk,
         we => "0000",
-        address => pc_out(13 downto 2),
+        address => pc_reg(13 downto 2),
         data_in => inst_data_in,
-        data_out => instruction
+        data_out => IF_ID_in.instruction
     );
 
-    --Determines register file input
-    reg_input_proc: process(all)
-    begin
-        case reg_data_src is
-            when "00" => reg_data_in <= alu_out; --ALU output
-            when "01" => reg_data_in <= mem_writeback_data; --Data Memory output
-            when "10" => reg_data_in <= immediate; --immediate
-            when others => reg_data_in <= next_pc; --PC
-        end case;
-    end process;
+    IF_ID_in.pc <= pc_reg;
 
+    ---------- ID STAGE ----------
     reg_file: entity work.reg_file
      generic map(
         ADDRESS_WIDTH => 5,
@@ -108,58 +153,106 @@ begin
     )
      port map(
         clk => clk,
-        rs1 => instruction(19 downto 15),
-        rs2 => instruction(24 downto 20),
-        rd => instruction(11 downto 7),
-        we => reg_we,
+        rs1 => IF_ID_out.instruction(19 downto 15),
+        rs2 => IF_ID_out.instruction(24 downto 20),
+        rd => MEM_WB_out.rd,
+        we => MEM_WB_out.reg_we,
         data_in => reg_data_in,
-        reg_out1 => reg_out1,
-        reg_out2 => reg_out2
+        reg_out1 => ID_EX_in.reg_out1,
+        reg_out2 => ID_EX_in.reg_out2
     );
 
     control_unit: entity work.control_unit
      port map(
-        instruction => instruction,
+        instruction => IF_ID_out.instruction,
         imm_sel => imm_sel,
-        ALU_src1 => ALU_src1,
-        ALU_src2 => ALU_src2,
-        branch_add_src => branch_add_src,
-        branch_en => branch_en,
-        ALU_op => ALU_op,
-        sub_arShift => sub_arShift,
-        jump => jump,
-        reg_data_src => reg_data_src,
-        reg_we => reg_we,
-        is_store_inst => is_store_inst
+        ALU_src1 => ID_EX_in.ALU_src1,
+        ALU_src2 => ID_EX_in.ALU_src2,
+        branch_add_src => ID_EX_in.branch_add_src,
+        branch_en => ID_EX_in.branch_en,
+        ALU_op => ID_EX_in.ALU_op,
+        sub_arShift => ID_EX_in.sub_arShift,
+        jump => ID_EX_in.jump,
+        reg_data_src => ID_EX_in.reg_data_src,
+        reg_we => ID_EX_in.reg_we,
+        is_store_inst => ID_EX_in.is_store_inst
     );
 
     imm_gen_unit: entity work.imm_gen_unit
      port map(
-        instruction => instruction,
+        instruction => IF_ID_out.instruction,
         imm_sel => imm_sel,
-        immediate => immediate
+        immediate => ID_EX_in.immediate
     );
 
-    alu_a <= reg_out1 when ALU_src1 = '0' else pc_out;
-    alu_b <= reg_out2 when ALU_src2 = '0' else immediate;
-    alu_shamt <= reg_out2(4 downto 0) when ALU_src2 = '0' else immediate(4 downto 0);
+    ID_EX_in.pc <= IF_ID_out.pc;
+    ID_EX_in.funct3 <= IF_ID_out.instruction(14 downto 12);
+    ID_EX_in.rs1 <= IF_ID_out.instruction(19 downto 15);
+    ID_EX_in.rs2 <= IF_ID_out.instruction(24 downto 20);
+    ID_EX_in.rd <= IF_ID_out.instruction(11 downto 7);
+
+
+    ---------- EX STAGE ----------
+    alu_a <= ID_EX_out.reg_out1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc;
+    alu_b <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate;
+    alu_shamt <= ID_EX_out.reg_out2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
 
     alu: entity work.alu
      port map(
         a => alu_a,
         b => alu_b,
-        op => ALU_op,
-        sub_arShift => sub_arShift,
+        op => ID_EX_out.ALU_op,
+        sub_arShift => ID_EX_out.sub_arShift,
         shamt => alu_shamt,
         result => alu_out
     );
 
+    branch_condition_unit: entity work.branch_condition_unit
+     port map(
+        funct3 => ID_EX_out.funct3,
+        ALUout => alu_out,
+        en => ID_EX_out.branch_en,
+        take_branch => take_branch
+    );
+
+    branch_adder_proc: process (all)
+    begin
+        if ID_EX_out.branch_add_src = '0' then
+            branch_adder_result <=  STD_LOGIC_VECTOR(unsigned(ID_EX_out.immediate) + unsigned(ID_EX_out.reg_out1)) and x"FFFFFFFE"; --set lsb to 0
+        else
+            branch_adder_result <= STD_LOGIC_VECTOR(unsigned(ID_EX_out.immediate) + unsigned(ID_EX_out.pc));
+        end if;
+    end process;
+
+    branch_resolution: process (all)
+    begin
+        if take_branch = '1' or ID_EX_out.jump = '1' then
+            next_pc <= branch_adder_result;
+            flush_pipeline <= '1';
+        else
+            next_pc <= STD_LOGIC_VECTOR(unsigned(pc_reg) + 4);
+            flush_pipeline <= '0';
+        end if;
+    end process;
+
+    EX_MEM_in.alu_out <= alu_out;
+    EX_MEM_in.pc <= ID_EX_out.pc;
+    EX_MEM_in.reg_out2 <= ID_EX_out.reg_out2;
+    EX_MEM_in.immediate <= ID_EX_out.immediate;
+    EX_MEM_in.rd <=ID_EX_out.rd;
+    EX_MEM_in.reg_data_src <= ID_EX_out.reg_data_src;
+    EX_MEM_in.reg_we <= ID_EX_out.reg_we;
+    EX_MEM_in.is_store_inst <= ID_EX_out.is_store_inst;
+    EX_MEM_in.funct3 <= ID_EX_out.funct3;   
+
+
+    ---------- MEM STAGE ----------
     store_alignment_unit: entity work.store_alignment_unit
      port map(
-        funct3 => instruction(14 downto 12),
-        alu_out => alu_out,
-        reg_out2 => reg_out2,
-        is_store_inst => is_store_inst,
+        funct3 => EX_MEM_out.funct3,
+        alu_out => EX_MEM_out.alu_out,
+        reg_out2 => EX_MEM_out.reg_out2,
+        is_store_inst => EX_MEM_out.is_store_inst,
         ram_data_in => ram_data_in,
         ram_we => data_ram_we
     );
@@ -171,25 +264,37 @@ begin
      port map(
         clk => clk,
         we => data_ram_we,
-        address => alu_out(13 downto 2),
+        address => EX_MEM_out.alu_out(13 downto 2),
         data_in => ram_data_in,
-        data_out => data_mem_out
+        data_out => MEM_WB_in.data_mem_out
     );
 
+    MEM_WB_in.pc <= EX_MEM_out.pc;
+    MEM_WB_in.rd <= EX_MEM_out.rd;
+    MEM_WB_in.reg_data_src <= EX_MEM_out.reg_data_src;
+    MEM_WB_in.reg_we <= EX_MEM_out.reg_we;
+    MEM_WB_in.alu_out <= EX_MEM_out.alu_out;
+    MEM_WB_in.immediate <= EX_MEM_out.immediate;
+
+
+    ---------- WB STAGE ----------
     data_loading_unit: entity work.data_loading_unit
      port map(
-        data_mem_out => data_mem_out,
-        byte_offset => alu_out(1 downto 0),
-        funct3 => instruction(14 downto 12),
+        data_mem_out => MEM_WB_out.data_mem_out,
+        byte_offset => MEM_WB_out.alu_out(1 downto 0),
+        funct3 => MEM_WB_out.funct3,
         mem_writeback_data => mem_writeback_data
     );
 
-    branch_condition_unit: entity work.branch_condition_unit
-     port map(
-        funct3 => instruction(14 downto 12),
-        ALUout => alu_out,
-        en => branch_en,
-        take_branch => take_branch
-    );
+     --Determines register file input
+    reg_input_proc: process(all)
+    begin
+        case MEM_WB_out.reg_data_src is
+            when "00" => reg_data_in <= MEM_WB_out.alu_out; --ALU output
+            when "01" => reg_data_in <= mem_writeback_data; --Data Memory output
+            when "10" => reg_data_in <= MEM_WB_out.immediate; --immediate
+            when others => reg_data_in <= STD_LOGIC_VECTOR(unsigned(MEM_WB_out.pc) + 4); --PC
+        end case;
+    end process;
 
 end rtl;
