@@ -36,7 +36,7 @@ begin
                 forwarded_A_in_EX_MEM := '1';
             end if;
 
-            if ex_stage_opcode = "01100" and EX_MEM_rd = ID_EX_rs2 then
+            if (ex_stage_opcode = "01100" or ex_stage_opcode = "11000") and EX_MEM_rd = ID_EX_rs2 then
                 forward_B <= "01";
                 forwarded_B_in_EX_MEM := '1';
             end if;
@@ -47,7 +47,7 @@ begin
                 forward_A <= "10";
             end if;
 
-            if ex_stage_opcode = "01100" and MEM_WB_rd = ID_EX_rs2 and forwarded_B_in_EX_MEM = '0' then
+            if (ex_stage_opcode = "01100" or ex_stage_opcode = "11000") and MEM_WB_rd = ID_EX_rs2 and forwarded_B_in_EX_MEM = '0' then
                 forward_B <= "10";
             end if;
         end if;
@@ -55,3 +55,4 @@ begin
     end process;
 
 end rtl;
+
