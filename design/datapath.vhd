@@ -36,6 +36,7 @@ architecture rtl of datapath is
         reg_we         : std_logic;
         is_store_inst  : std_logic;
         funct3: STD_LOGIC_VECTOR(2 downto 0);
+        opcode: STD_LOGIC_VECTOR(4 downto 0);
 
     end record;
 
@@ -93,6 +94,8 @@ architecture rtl of datapath is
     signal alu_b: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_shamt: STD_LOGIC_VECTOR(4 downto 0);
     signal mem_writeback_data: STD_LOGIC_VECTOR(31 downto 0);
+    signal forward_A: STD_LOGIC_VECTOR(1 downto 0);
+    signal forward_B: STD_LOGIC_VECTOR(1 downto 0);
 
 begin
 
@@ -190,11 +193,39 @@ begin
     ID_EX_in.rs1 <= IF_ID_out.instruction(19 downto 15);
     ID_EX_in.rs2 <= IF_ID_out.instruction(24 downto 20);
     ID_EX_in.rd <= IF_ID_out.instruction(11 downto 7);
+    ID_EX_in.opcode <= IF_ID_out.instruction(6 downto 2);
 
 
     ---------- EX STAGE ----------
-    alu_a <= ID_EX_out.reg_out1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc;
-    alu_b <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate;
+
+    forwarding_unit: entity work.forwarding_unit
+     port map(
+        EX_MEM_reg_we => EX_MEM_out.reg_we,
+        MEM_WB_reg_we => MEM_WB_out.reg_we,
+        ID_EX_rs1 => ID_EX_out.rs1,
+        ID_EX_rs2 => ID_EX_out.rs2,
+        EX_MEM_rd => EX_MEM_out.rd,
+        MEM_WB_rd => MEM_WB_out.rd,
+        ex_stage_opcode => ID_EX_out.opcode,
+        forward_A => forward_A,
+        forward_B => forward_B
+    );
+
+    alu_input_selection_proc: process(all)
+    begin
+        case forward_A is
+            when "01" => alu_a <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register 
+            when "10" => alu_a <= MEM_WB_out.alu_out; -- forwarded value from MEM_WB register
+            when others => alu_a <= ID_EX_out.reg_out1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc; -- regular ALU insput selection
+        end case;
+
+        case forward_B is
+            when "01" => alu_b <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register 
+            when "10" => alu_b <= MEM_WB_out.alu_out; -- forwarded value from MEM_WB register
+            when others => alu_b <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate; -- regular ALU insput selection
+        end case;
+    end process;
+
     alu_shamt <= ID_EX_out.reg_out2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
 
     alu: entity work.alu
