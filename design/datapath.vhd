@@ -43,7 +43,6 @@ architecture rtl of datapath is
     type EX_MEM is record
 
         pc: STD_LOGIC_VECTOR(31 downto 0);
-        reg_out1: STD_LOGIC_VECTOR(31 downto 0);
         reg_out2: STD_LOGIC_VECTOR(31 downto 0);
         immediate: STD_LOGIC_VECTOR(31 downto 0);
         rd: STD_LOGIC_VECTOR(4 downto 0);
@@ -81,6 +80,8 @@ architecture rtl of datapath is
     signal pc_reg: STD_LOGIC_VECTOR(31 downto 0);
     signal next_pc: STD_LOGIC_VECTOR(31 downto 0);
 
+    signal instruction: STD_LOGIC_VECTOR(31 downto 0);
+    signal stall_pipeline: STD_LOGIC;
     signal flush_pipeline: STD_LOGIC;
     signal branch_adder_result: STD_LOGIC_VECTOR(31 downto 0);
     signal take_branch: STD_LOGIC;
@@ -96,6 +97,7 @@ architecture rtl of datapath is
     signal mem_writeback_data: STD_LOGIC_VECTOR(31 downto 0);
     signal forward_A: STD_LOGIC_VECTOR(1 downto 0);
     signal forward_B: STD_LOGIC_VECTOR(1 downto 0);
+    signal forwarded_rs2: STD_LOGIC_VECTOR(31 downto 0);
 
 begin
 
@@ -105,14 +107,16 @@ begin
             if rst_btn = '1' then
                 pc_reg <= (others => '0');
             else
-                pc_reg <= next_pc;
+                --if the pipeline is stalled, a NOP is inserted as the next instruction and the value of the PC remains the same
+                pc_reg <= next_pc when stall_pipeline = '0' or flush_pipeline = '1' else pc_reg;
 
                 if flush_pipeline = '1' then
                     --If a branch is taken, the flush_pipeline signal turns on in order to remove the effect of the instructions that are on the 2 first stages of the pipline.
-                    --We overwrite the IF_ID's and ID_EX's registers write enable and jump/branch signals to 0 to turn the first 2 instructions of the pipline to NOPs
+                    --We overwrite the ID_EX's registers write enable and jump/branch signals to 0 to turn the first 2 instructions of the pipline to NOPs
                     --This needs to happen because this 2 instructions should not be executed due to the branch.
                     
-                    IF_ID_out <= IF_ID_in;
+                    IF_ID_out.instruction <= x"00000013"; --NOP
+                    IF_ID_out.pc <= IF_ID_in.pc;
 
                     ID_EX_out <=ID_EX_in;
                     ID_EX_out.reg_we <= '0';
@@ -143,12 +147,24 @@ begin
         we => "0000",
         address => pc_reg(13 downto 2),
         data_in => inst_data_in,
-        data_out => IF_ID_in.instruction
+        data_out => instruction
     );
 
     IF_ID_in.pc <= pc_reg;
+    IF_ID_in.instruction <= instruction when stall_pipeline = '0' else x"00000013";
 
+    
     ---------- ID STAGE ----------
+    hazard_detection_unit: entity work.hazard_detection_unit
+     port map(
+        new_opcode => instruction(6 downto 2),
+        IF_ID_opcode => IF_ID_out.instruction(6 downto 2),
+        IF_ID_rd => IF_ID_out.instruction(11 downto 7),
+        new_rs1 => instruction(19 downto 15),
+        new_rs2 => instruction(24 downto 20),
+        stall_pipeline => stall_pipeline
+    );
+
     reg_file: entity work.reg_file
      generic map(
         ADDRESS_WIDTH => 5,
@@ -214,18 +230,20 @@ begin
     alu_input_selection_proc: process(all)
     begin
         case forward_A is
-            when "01" => alu_a <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register 
-            when "10" => alu_a <= MEM_WB_out.alu_out; -- forwarded value from MEM_WB register
+            when "01" => alu_a <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register
+            --forwarded value from WB stage (reg_data_in could be the ALU's output, an immediate, data from memory or the PC value, depending on the instruction)
+            when "10" => alu_a <= reg_data_in; 
             when others => alu_a <= ID_EX_out.reg_out1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc; -- regular ALU insput selection
         end case;
 
         case forward_B is
-            when "01" => alu_b <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register 
-            when "10" => alu_b <= MEM_WB_out.alu_out; -- forwarded value from MEM_WB register
-            when others => alu_b <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate; -- regular ALU insput selection
+            when "01" => forwarded_rs2 <= EX_MEM_out.alu_out;
+            when "10" => forwarded_rs2 <= reg_data_in;
+            when others => forwarded_rs2 <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate; 
         end case;
     end process;
 
+    alu_b <= forwarded_rs2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate;
     alu_shamt <= ID_EX_out.reg_out2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
 
     alu: entity work.alu
@@ -266,9 +284,9 @@ begin
         end if;
     end process;
 
+    EX_MEM_in.reg_out2 <= forwarded_rs2;
     EX_MEM_in.alu_out <= alu_out;
     EX_MEM_in.pc <= ID_EX_out.pc;
-    EX_MEM_in.reg_out2 <= ID_EX_out.reg_out2;
     EX_MEM_in.immediate <= ID_EX_out.immediate;
     EX_MEM_in.rd <=ID_EX_out.rd;
     EX_MEM_in.reg_data_src <= ID_EX_out.reg_data_src;
