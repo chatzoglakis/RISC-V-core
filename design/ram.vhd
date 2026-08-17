@@ -35,12 +35,12 @@ architecture rtl of ram is
     );
 
 begin
-
-    data_out <= ram(to_integer(unsigned(address))); 
     
     process(clk)
     begin
         if rising_edge(clk) then
+
+            data_out <= ram(to_integer(unsigned(address))); 
 
             if we(0) = '1' then
                 ram(to_integer(unsigned(address)))(7 downto 0) <= data_in(7 downto 0);
