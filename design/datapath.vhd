@@ -106,7 +106,6 @@ begin
         if rising_edge(clk) then
             if rst_btn = '1' then
                 pc_reg <= (others => '0');
-                flush_pipeline <= '0';
                 
                 ID_EX_out.reg_we <= '0';
                 EX_MEM_out.reg_we <= '0';
