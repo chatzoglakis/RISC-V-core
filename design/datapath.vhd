@@ -13,7 +13,7 @@ end datapath;
 
 architecture rtl of datapath is
 
-     type IF_ID is record
+    type IF_ID is record
         pc: STD_LOGIC_VECTOR(31 downto 0);
     end record;
 
