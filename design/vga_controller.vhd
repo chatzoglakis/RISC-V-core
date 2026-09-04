@@ -2,6 +2,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
+
 entity vga_controller is
     port(
         clk, rst: in STD_LOGIC;
@@ -18,23 +19,26 @@ architecture rtl of vga_controller is
     signal pixel_x: STD_LOGIC_VECTOR(8 downto 0);
     signal pixel_y : std_logic_vector (8 downto 0);
 
-    signal v_count: STD_LOGIC_VECTOR(9 downto 0);
-    signal h_count: STD_LOGIC_VECTOR(9 downto 0);
+    signal v_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
+    signal h_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
     signal v_sync_reg: STD_LOGIC;
     signal h_sync_reg : std_logic ;
     signal video_on: STD_LOGIC;
-    signal framebuffer: STD_LOGIC := '0';
+    signal framebuffer_sel: STD_LOGIC := '0';
+    signal pixel_addr_math : unsigned(16 downto 0);
 
 begin
 
     sync_proc:process(clk, rst) is
     begin
         if rising_edge(clk) then
+
             if rst = '1' then
                 h_count <= (others => '0');
                 v_count <= (others => '0');
                 h_sync_reg <= '1';
                 v_sync_reg <= '1';
+                framebuffer_sel <= '0';
             else
                 
 
@@ -46,6 +50,11 @@ begin
                         v_count <= (others => '0');
                     else
                         v_count <= STD_LOGIC_VECTOR(unsigned(v_count) + 1);
+                    end if;
+
+                    --change framebuffer when the whole screen has been "painted"
+                    if unsigned(v_count) = 479 then
+                        framebuffer_sel <= not framebuffer_sel;
                     end if;
                     
                 else
@@ -70,15 +79,19 @@ begin
     end process;
 
     video_on <= '1' when (unsigned(h_count) < 640 and unsigned(v_count) < 480) else '0';
-    framebuffer <= not framebuffer when unsigned(v_count) = 480 else framebuffer; --change framebuffer when the whole screen has been "painted"
     
     hsync <= h_sync_reg;
     vsync <= v_sync_reg;
+    -- Drop the lowest bit to scale 640x480 down to 320x240
     pixel_x <= h_count(9 downto 1);
     pixel_y <= v_count(9 downto 1);
 
-    -- (Y << 8) + (Y << 6) + X
-    read_address <= framebuffer & STD_LOGIC_VECTOR(unsigned(pixel_y & "00000000") + unsigned(pixel_y & "000000") + unsigned(pixel_x))(16 downto 0);
+    -- Calculate (Y * 256) + (Y * 64) + X
+    pixel_addr_math <= unsigned(pixel_y & "00000000") + 
+                       unsigned(pixel_y & "000000") + 
+                       unsigned(pixel_x);
+
+    read_address <= framebuffer_sel & STD_LOGIC_VECTOR(pixel_addr_math);
 
     coloring_proc:process(clk, rst) is
     begin
@@ -104,4 +117,4 @@ begin
         end if;
     end process;
 
-end rtl;;
+end rtl;
