@@ -5,7 +5,9 @@ use IEEE.NUMERIC_STD.ALL;
 entity datapath is
     port(
         clk: in STD_LOGIC;
-        rst_btn: in STD_LOGIC
+        rst_btn: in STD_LOGIC;
+        hsync, vsync: out STD_LOGIC;
+        r,g,b: out STD_LOGIC_VECTOR(3 downto 0)
     );
 end datapath;
 
@@ -63,6 +65,9 @@ architecture rtl of datapath is
         alu_out: STD_LOGIC_VECTOR(31 downto 0);
     end record;
 
+    signal clk_75 : STD_LOGIC;
+    signal clk_25 : STD_LOGIC;
+
     signal IF_ID_in: IF_ID;
     signal IF_ID_out: IF_ID;
 
@@ -99,11 +104,34 @@ architecture rtl of datapath is
     signal forward_B: STD_LOGIC_VECTOR(1 downto 0);
     signal forwarded_rs2: STD_LOGIC_VECTOR(31 downto 0);
 
+
+    signal vram_we: STD_LOGIC;
+    signal address_a: STD_LOGIC_VECTOR(17 downto 0);
+    signal data_a: STD_LOGIC_VECTOR(7 downto 0);
+
+    signal address_b: STD_LOGIC_VECTOR(17 downto 0);
+    signal pixel_data: STD_LOGIC_VECTOR(7 downto 0);
+
+    component clk_wiz_0 is
+        port (
+            clk_in1  : in  STD_LOGIC;
+            clk_out1 : out STD_LOGIC;
+            clk_out2 : out STD_LOGIC
+        );
+    end component;
+
 begin
 
-    pipeline_registers: process(clk)
+    clk_wiz_inst: clk_wiz_0
+        port map(
+            clk_in1 => clk, --Zybo Z7's 125 MHz clock
+            clk_out1 => clk_75, --CPU's 75 Hz clock
+            clk_out2 => clk_25 -- VGA controller's 25.2 MHz clock 
+        );
+
+    pipeline_registers: process(clk_75)
     begin
-        if rising_edge(clk) then
+        if rising_edge(clk_75) then
             if rst_btn = '1' then
                 pc_reg <= (others => '0');
                 
@@ -147,7 +175,7 @@ begin
         ADDRESS_WIDTH => 12
     )
      port map(
-        clk => clk,
+        clk => clk_75,
         we => "0000",
         address => pc_reg(13 downto 2),
         data_in => inst_data_in,
@@ -162,7 +190,7 @@ begin
         DATA_WIDTH => 32
     )
      port map(
-        clk => clk,
+        clk => clk_75,
         rs1 => instruction(19 downto 15),
         rs2 => instruction(24 downto 20),
         rd => MEM_WB_out.rd,
@@ -303,7 +331,8 @@ begin
         reg_out2 => EX_MEM_out.reg_out2,
         is_store_inst => EX_MEM_out.is_store_inst,
         ram_data_in => ram_data_in,
-        ram_we => data_ram_we
+        data_ram_we => data_ram_we,
+        vram_we => vram_we
     );
 
     data_ram: entity work.ram
@@ -311,11 +340,35 @@ begin
         ADDRESS_WIDTH => 12
     )
      port map(
-        clk => clk,
+        clk => clk_75,
         we => data_ram_we,
         address => EX_MEM_out.alu_out(13 downto 2),
         data_in => ram_data_in,
         data_out => data_mem_out
+    );
+
+    vram: entity work.vram
+     port map(
+        clk_a => clk_75,
+        we_a => vram_we,
+        address_a => EX_MEM_out.alu_out(17 downto 0),
+        data_a => ram_data_in(7 downto 0),
+        clk_b => clk_25,
+        address_b => address_b,
+        data_b => pixel_data
+    );
+
+    vga_controller: entity work.vga_controller
+     port map(
+        clk => clk_25,
+        rst => rst_btn,
+        pixel_data => pixel_data,
+        hsync => hsync,
+        vsync => vsync,
+        read_address => address_b,
+        r => r,
+        g => g,
+        b => b
     );
 
     MEM_WB_in.pc <= EX_MEM_out.pc;
