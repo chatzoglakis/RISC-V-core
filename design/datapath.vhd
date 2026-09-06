@@ -52,6 +52,9 @@ architecture rtl of datapath is
         is_store_inst: STD_LOGIC;
         funct3: STD_LOGIC_VECTOR(2 downto 0);
         alu_out: STD_LOGIC_VECTOR(31 downto 0);
+        branch_en: STD_LOGIC;
+        branch_adder_result: STD_LOGIC_VECTOR(31 downto 0);
+        jump: STD_LOGIC;
 
     end record;
 
@@ -103,7 +106,7 @@ architecture rtl of datapath is
     signal forward_A: STD_LOGIC_VECTOR(1 downto 0);
     signal forward_B: STD_LOGIC_VECTOR(1 downto 0);
     signal forwarded_rs2: STD_LOGIC_VECTOR(31 downto 0);
-
+    signal forwarded_rs1: STD_LOGIC_VECTOR(31 downto 0);
 
     signal vram_we: STD_LOGIC;
     signal address_a: STD_LOGIC_VECTOR(17 downto 0);
@@ -139,21 +142,20 @@ begin
                 EX_MEM_out.reg_we <= '0';
                 MEM_WB_out.reg_we <= '0';
                 ID_EX_out.is_store_inst <= '0';
+                flush_delayed <= '0';
             else
-                flush_delayed <= flush_pipeline;
+                --This design predicts that a branch is not taken until the branch is resolved
+                --Branch resolution happens at the MEM stage, meaning that the 3 stages before need to be flushed if branch is taken
+                
+                flush_delayed <= flush_pipeline; 
 
                 --if the pipeline is stalled, a NOP is inserted as the next instruction and the value of the PC remains the same
                 pc_reg <= next_pc when stall_pipeline = '0' or flush_pipeline = '1' else pc_reg;
                 IF_ID_out.pc <= pc_reg;
 
-                if flush_pipeline = '1' or flush_delayed = '1' or stall_pipeline = '1' then
-                    --If a branch is taken, the flush_pipeline and flush_delayed signals turn on in order to remove the effect of the instructions that are on the 2 first stages of the pipline.
-                    --First the flush_pipeline turns on to stop the 1st instruction, then it passes its value to flush_delayed to stop the 2nd instruction
-                    --We overwrite the ID_EX's registers write enable and jump/branch signals to 0 to turn the first 2 instructions of the pipline to NOPs
-                    --This needs to happen because these 2 instructions should not be executed due to the branch.
-                    --Same thing happens when stalling the pipline, but just for 1 instruction (hence why there is no stall_delayed signal)
-
+                if stall_pipeline = '1' or flush_pipeline = '1' or flush_delayed = '1' then
                     ID_EX_out <= ID_EX_in;
+                    
                     ID_EX_out.reg_we <= '0';
                     ID_EX_out.branch_en <= '0';
                     ID_EX_out.jump <= '0';
@@ -162,7 +164,17 @@ begin
                     ID_EX_out <= ID_EX_in;
                 end if;
 
-                EX_MEM_out <= EX_MEM_in;
+                if flush_pipeline = '1' then
+                    EX_MEM_out <= EX_MEM_in;
+                    
+                    EX_MEM_out.reg_we <= '0';
+                    EX_MEM_out.branch_en <= '0';
+                    EX_MEM_out.jump <= '0';
+                    EX_MEM_out.is_store_inst <= '0';
+                else
+                    EX_MEM_out <= EX_MEM_in;
+                end if;
+
                 MEM_WB_out <= MEM_WB_in;
             end if;
         end if;
@@ -258,19 +270,20 @@ begin
     alu_input_selection_proc: process(all)
     begin
         case forward_A is
-            when "01" => alu_a <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register
+            when "01" => forwarded_rs1 <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register
             --forwarded value from WB stage (reg_data_in could be the ALU's output, an immediate, data from memory or the PC value, depending on the instruction)
-            when "10" => alu_a <= reg_data_in; 
-            when others => alu_a <= ID_EX_out.reg_out1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc; -- regular ALU insput selection
+            when "10" => forwarded_rs1 <= reg_data_in; 
+            when others => forwarded_rs1 <= ID_EX_out.reg_out1; -- regular ALU insput selection
         end case;
 
         case forward_B is
             when "01" => forwarded_rs2 <= EX_MEM_out.alu_out;
             when "10" => forwarded_rs2 <= reg_data_in;
-            when others => forwarded_rs2 <= ID_EX_out.reg_out2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate; 
+            when others => forwarded_rs2 <= ID_EX_out.reg_out2; 
         end case;
     end process;
 
+    alu_a <= forwarded_rs1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc;
     alu_b <= forwarded_rs2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate;
     alu_shamt <= ID_EX_out.reg_out2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
 
@@ -284,31 +297,12 @@ begin
         result => alu_out
     );
 
-    branch_condition_unit: entity work.branch_condition_unit
-     port map(
-        funct3 => ID_EX_out.funct3,
-        ALUout => alu_out,
-        en => ID_EX_out.branch_en,
-        take_branch => take_branch
-    );
-
     branch_adder_proc: process (all)
     begin
         if ID_EX_out.branch_add_src = '0' then
-            branch_adder_result <=  STD_LOGIC_VECTOR(unsigned(ID_EX_out.immediate) + unsigned(ID_EX_out.reg_out1)) and x"FFFFFFFE"; --set lsb to 0
+            branch_adder_result <=  STD_LOGIC_VECTOR(unsigned(ID_EX_out.immediate) + unsigned(forwarded_rs1)) and x"FFFFFFFE"; --set lsb to 0
         else
             branch_adder_result <= STD_LOGIC_VECTOR(unsigned(ID_EX_out.immediate) + unsigned(ID_EX_out.pc));
-        end if;
-    end process;
-
-    branch_resolution: process (all)
-    begin
-        if take_branch = '1' or ID_EX_out.jump = '1' then
-            next_pc <= branch_adder_result;
-            flush_pipeline <= '1';
-        else
-            next_pc <= STD_LOGIC_VECTOR(unsigned(pc_reg) + 4);
-            flush_pipeline <= '0';
         end if;
     end process;
 
@@ -320,10 +314,31 @@ begin
     EX_MEM_in.reg_data_src <= ID_EX_out.reg_data_src;
     EX_MEM_in.reg_we <= ID_EX_out.reg_we;
     EX_MEM_in.is_store_inst <= ID_EX_out.is_store_inst;
-    EX_MEM_in.funct3 <= ID_EX_out.funct3;   
-
+    EX_MEM_in.funct3 <= ID_EX_out.funct3;
+    EX_MEM_in.branch_en <= ID_EX_out.branch_en;
+    EX_MEM_in.branch_adder_result <= branch_adder_result;
+    EX_MEM_in.jump <= ID_EX_out.jump;
 
     ---------- MEM STAGE ----------
+    branch_condition_unit: entity work.branch_condition_unit
+     port map(
+        funct3 => EX_MEM_out.funct3,
+        ALUout => EX_MEM_out.alu_out,
+        en => EX_MEM_out.branch_en,
+        take_branch => take_branch
+    );
+
+    branch_resolution: process (all)
+    begin
+        if take_branch = '1' or EX_MEM_out.jump = '1' then
+            next_pc <= EX_MEM_out.branch_adder_result;
+            flush_pipeline <= '1'; 
+        else
+            next_pc <= STD_LOGIC_VECTOR(unsigned(pc_reg) + 4);
+            flush_pipeline <= '0'; 
+        end if;
+    end process;
+
     store_alignment_unit: entity work.store_alignment_unit
      port map(
         funct3 => EX_MEM_out.funct3,
