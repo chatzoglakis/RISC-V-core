@@ -7,6 +7,7 @@ entity vga_controller is
     port(
         clk, rst: in STD_LOGIC;
         pixel_data: in STD_LOGIC_VECTOR(7 downto 0);
+        framebuffer_sel: in STD_LOGIC;
         hsync: out STD_LOGIC;
         vsync: out STD_LOGIC;
         read_address: out STD_LOGIC_VECTOR(17 downto 0);
@@ -24,8 +25,7 @@ architecture rtl of vga_controller is
     signal v_sync_reg: STD_LOGIC;
     signal h_sync_reg : std_logic ;
     signal video_on: STD_LOGIC;
-    signal framebuffer_sel: STD_LOGIC := '0';
-    signal pixel_addr_math : unsigned(16 downto 0);
+    signal pixel_addr_math : unsigned(17 downto 0);
 
 begin
 
@@ -38,7 +38,6 @@ begin
                 v_count <= (others => '0');
                 h_sync_reg <= '1';
                 v_sync_reg <= '1';
-                framebuffer_sel <= '0';
             else
                 
 
@@ -50,11 +49,6 @@ begin
                         v_count <= (others => '0');
                     else
                         v_count <= STD_LOGIC_VECTOR(unsigned(v_count) + 1);
-                    end if;
-
-                    --change framebuffer when the whole screen has been "painted"
-                    if unsigned(v_count) = 479 then
-                        framebuffer_sel <= not framebuffer_sel;
                     end if;
                     
                 else
@@ -87,11 +81,13 @@ begin
     pixel_y <= v_count(9 downto 1);
 
     -- Calculate (Y * 256) + (Y * 64) + X
-    pixel_addr_math <= unsigned(pixel_y & "00000000") + 
-                       unsigned(pixel_y & "000000") + 
-                       unsigned(pixel_x);
+    pixel_addr_math <= (others => '0') when video_on = '0' else
+                    resize(unsigned(pixel_y & "00000000") + 
+                    unsigned(pixel_y & "000000") + 
+                    unsigned(pixel_x), 18);
 
-    read_address <= framebuffer_sel & STD_LOGIC_VECTOR(pixel_addr_math);
+    read_address <= STD_LOGIC_VECTOR(pixel_addr_math + 76800) when framebuffer_sel = '1' 
+                else STD_LOGIC_VECTOR(pixel_addr_math);
 
     coloring_proc:process(clk, rst) is
     begin
@@ -101,13 +97,13 @@ begin
             b <= "0000";
         elsif rising_edge(clk) then
             if video_on = '1' then            
-                -- RED:   Take top 3 bits, duplicate bit 7 at the bottom
+                -- RED: Take top 3 bits, duplicate bit 7 at the bottom
                 r <= pixel_data(7 downto 5) & pixel_data(7);
                 
                 -- GREEN: Take next 3 bits, duplicate bit 4 at the bottom
                 g <= pixel_data(4 downto 2) & pixel_data(4);
                 
-                -- BLUE:  Take bottom 2 bits, duplicate them to make 4 bits
+                -- BLUE: Take bottom 2 bits, duplicate them to make 4 bits
                 b <= pixel_data(1 downto 0) & pixel_data(1 downto 0);
             else
                 r <= "0000";
