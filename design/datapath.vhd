@@ -18,7 +18,6 @@ architecture rtl of datapath is
     end record;
 
     type ID_EX is record
-
         pc: STD_LOGIC_VECTOR(31 downto 0);
         rs1: STD_LOGIC_VECTOR(4 downto 0);
         rs2: STD_LOGIC_VECTOR(4 downto 0);
@@ -38,11 +37,9 @@ architecture rtl of datapath is
         is_store_inst  : std_logic;
         funct3: STD_LOGIC_VECTOR(2 downto 0);
         opcode: STD_LOGIC_VECTOR(4 downto 0);
-
     end record;
 
     type EX_MEM is record
-
         pc: STD_LOGIC_VECTOR(31 downto 0);
         reg_out2: STD_LOGIC_VECTOR(31 downto 0);
         immediate: STD_LOGIC_VECTOR(31 downto 0);
@@ -55,7 +52,6 @@ architecture rtl of datapath is
         branch_en: STD_LOGIC;
         branch_adder_result: STD_LOGIC_VECTOR(31 downto 0);
         jump: STD_LOGIC;
-
     end record;
 
     type MEM_WB is record
@@ -112,8 +108,10 @@ architecture rtl of datapath is
     signal address_a: STD_LOGIC_VECTOR(17 downto 0);
     signal data_a: STD_LOGIC_VECTOR(7 downto 0);
 
-    signal address_b: STD_LOGIC_VECTOR(17 downto 0);
+    signal vram_read_address: STD_LOGIC_VECTOR(17 downto 0);
     signal pixel_data: STD_LOGIC_VECTOR(7 downto 0);
+    signal async_framebuffer_sel : STD_LOGIC := '0';
+    signal sync_framebuffer_sel: STD_LOGIC := '0';
 
     component clk_wiz_0 is
         port (
@@ -369,18 +367,40 @@ begin
         address_a => EX_MEM_out.alu_out(17 downto 0),
         data_a => ram_data_in(7 downto 0),
         clk_b => clk_25,
-        address_b => address_b,
+        address_b => vram_read_address,
         data_b => pixel_data
+    );
+
+    framebuffer_selection_proc: process(clk_75)
+    begin
+        if rising_edge(clk_75) then
+            if rst_btn = '1' then
+                async_framebuffer_sel <= '0';
+            -- Store instructions targeting 0x80000000 set the active framebuffer
+            elsif EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = x"80000000" then
+                -- Latch the Lowest Bit (LSB) of the CPU's register data
+                async_framebuffer_sel <= EX_MEM_out.reg_out2(0);
+            end if;
+        end if;
+    end process;
+
+    two_ff_synchronizer: entity work.two_ff_synchronizer
+     port map(
+        clk => clk_25,
+        rst => rst_btn,
+        async_data => async_framebuffer_sel,
+        sync_data => sync_framebuffer_sel
     );
 
     vga_controller: entity work.vga_controller
      port map(
         clk => clk_25,
         rst => rst_btn,
+        framebuffer_sel => sync_framebuffer_sel,
         pixel_data => pixel_data,
         hsync => hsync,
         vsync => vsync,
-        read_address => address_b,
+        read_address => vram_read_address,
         r => r,
         g => g,
         b => b
