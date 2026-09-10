@@ -6,12 +6,16 @@ entity datapath is
     port(
         clk: in STD_LOGIC;
         rst_btn: in STD_LOGIC;
+        raw_btn_input: in STD_LOGIC_VECTOR(3 downto 0);
         hsync, vsync: out STD_LOGIC;
         r,g,b: out STD_LOGIC_VECTOR(3 downto 0)
     );
 end datapath;
 
 architecture rtl of datapath is
+
+    constant FRAMEBUFFER_CONTROL_ADDRESS: STD_LOGIC_VECTOR(31 downto 0) := x"80000000";
+    constant BUTTON_REG_ADDRESS: STD_LOGIC_VECTOR(31 downto 0) := x"80000004";
 
     type IF_ID is record
         pc: STD_LOGIC_VECTOR(31 downto 0);
@@ -64,7 +68,7 @@ architecture rtl of datapath is
         alu_out: STD_LOGIC_VECTOR(31 downto 0);
     end record;
 
-    signal clk_75 : STD_LOGIC;
+    signal clk_90 : STD_LOGIC;
     signal clk_25 : STD_LOGIC;
 
     signal IF_ID_in: IF_ID;
@@ -113,6 +117,8 @@ architecture rtl of datapath is
     signal async_framebuffer_sel : STD_LOGIC := '0';
     signal sync_framebuffer_sel: STD_LOGIC := '0';
 
+    signal btn_reg: STD_LOGIC_VECTOR(3 downto 0);
+
     component clk_wiz_0 is
         port (
             clk_in1  : in  STD_LOGIC;
@@ -126,13 +132,13 @@ begin
     clk_wiz_inst: clk_wiz_0
         port map(
             clk_in1 => clk, --Zybo Z7's 125 MHz clock
-            clk_out1 => clk_75, --CPU's 75 Hz clock
+            clk_out1 => clk_90, --CPU's 90 MHz clock
             clk_out2 => clk_25 -- VGA controller's 25.2 MHz clock 
         );
 
-    pipeline_registers: process(clk_75)
+    pipeline_registers: process(clk_90)
     begin
-        if rising_edge(clk_75) then
+        if rising_edge(clk_90) then
             if rst_btn = '1' then
                 pc_reg <= (others => '0');
                 
@@ -185,7 +191,7 @@ begin
         ADDRESS_WIDTH => 12
     )
      port map(
-        clk => clk_75,
+        clk => clk_90,
         we => "0000",
         address => pc_reg(13 downto 2),
         data_in => inst_data_in,
@@ -200,7 +206,7 @@ begin
         DATA_WIDTH => 32
     )
      port map(
-        clk => clk_75,
+        clk => clk_90,
         rs1 => instruction(19 downto 15),
         rs2 => instruction(24 downto 20),
         rd => MEM_WB_out.rd,
@@ -353,7 +359,7 @@ begin
         ADDRESS_WIDTH => 12
     )
      port map(
-        clk => clk_75,
+        clk => clk_90,
         we => data_ram_we,
         address => EX_MEM_out.alu_out(13 downto 2),
         data_in => ram_data_in,
@@ -362,7 +368,7 @@ begin
 
     vram: entity work.vram
      port map(
-        clk_a => clk_75,
+        clk_a => clk_90,
         we_a => vram_we,
         address_a => EX_MEM_out.alu_out(17 downto 0),
         data_a => ram_data_in(7 downto 0),
@@ -371,13 +377,13 @@ begin
         data_b => pixel_data
     );
 
-    framebuffer_selection_proc: process(clk_75)
+    framebuffer_selection_proc: process(clk_90)
     begin
-        if rising_edge(clk_75) then
+        if rising_edge(clk_90) then
             if rst_btn = '1' then
                 async_framebuffer_sel <= '0';
             -- Store instructions targeting 0x80000000 set the active framebuffer
-            elsif EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = x"80000000" then
+            elsif EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = FRAMEBUFFER_CONTROL_ADDRESS then
                 -- Latch the Lowest Bit (LSB) of the CPU's register data
                 async_framebuffer_sel <= EX_MEM_out.reg_out2(0);
             end if;
@@ -428,10 +434,21 @@ begin
     begin
         case MEM_WB_out.reg_data_src is
             when "00" => reg_data_in <= MEM_WB_out.alu_out; --ALU output
-            when "01" => reg_data_in <= mem_writeback_data; --Data Memory output
+            when "01" => reg_data_in <= mem_writeback_data when MEM_WB_out.alu_out /= BUTTON_REG_ADDRESS else x"0000000" & btn_reg; --Data Memory output or button reg output
             when "10" => reg_data_in <= MEM_WB_out.immediate; --immediate
             when others => reg_data_in <= STD_LOGIC_VECTOR(unsigned(MEM_WB_out.pc) + 4); --PC
         end case;
     end process;
+
+
+    button_debouncers: for i in 0 to 3 generate
+        debouncer_synchronizer: entity work.debouncer_synchronizer
+            port map(
+                    clk => clk_90,
+                    rst => rst_btn,
+                    btn_in => raw_btn_input(i),
+                    btn_state => btn_reg(i)
+                );
+    end generate button_debouncers;
 
 end rtl;
