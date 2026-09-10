@@ -21,6 +21,7 @@ architecture rtl of forwarding_unit is
     constant S_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01000";
     constant B_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "11000";
     constant R_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01100";
+    constant I_ALU_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "00100"; -- ADDI, SLTI, etc.
 
 begin
 
@@ -40,7 +41,7 @@ begin
                 forwarded_A_in_EX_MEM := '1';
             end if;
 
-            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE) and EX_MEM_rd = ID_EX_rs2 then
+            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE or ex_stage_opcode = I_ALU_TYPE) and EX_MEM_rd = ID_EX_rs2 then
                 forward_B <= "01";
                 forwarded_B_in_EX_MEM := '1';
             end if;
@@ -51,7 +52,7 @@ begin
                 forward_A <= "10";
             end if;
 
-            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE) and MEM_WB_rd = ID_EX_rs2 and forwarded_B_in_EX_MEM = '0' then
+            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE or ex_stage_opcode = I_ALU_TYPE) and MEM_WB_rd = ID_EX_rs2 and forwarded_B_in_EX_MEM = '0' then
                 forward_B <= "10";
             end if;
         end if;
