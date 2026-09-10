@@ -18,15 +18,16 @@ architecture rtl of hazard_detection_unit is
     constant S_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01000";
     constant B_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "11000";
     constant R_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01100";
+    constant I_ALU_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "00100"; -- ADDI, SLTI, etc.
     constant LOAD: STD_LOGIC_VECTOR(4 downto 0) := "00000";
     constant LUI: STD_LOGIC_VECTOR(4 downto 0) := "01101";
-
+    
 begin
 
     process(all)
     begin
         if (ID_EX_opcode = LOAD or ID_EX_opcode = LUI) and 
-           (ID_EX_rd = IF_ID_rs1 or ( ID_EX_rd = IF_ID_rs2 and (IF_ID_opcode = R_TYPE or IF_ID_opcode = B_TYPE or IF_ID_opcode = S_TYPE))) 
+           (ID_EX_rd = IF_ID_rs1 or ( ID_EX_rd = IF_ID_rs2 and (IF_ID_opcode = R_TYPE or IF_ID_opcode = B_TYPE or IF_ID_opcode = S_TYPE or IF_ID_opcode = I_ALU_TYPE))) 
            and ID_EX_rd /= "00000" then
 
             stall_pipeline <= '1';
