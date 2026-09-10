@@ -19,6 +19,7 @@ architecture rtl of datapath is
 
     type IF_ID is record
         pc: STD_LOGIC_VECTOR(31 downto 0);
+        instruction: STD_LOGIC_VECTOR(31 downto 0);
     end record;
 
     type ID_EX is record
@@ -86,8 +87,10 @@ architecture rtl of datapath is
     signal pc_reg: STD_LOGIC_VECTOR(31 downto 0);
     signal next_pc: STD_LOGIC_VECTOR(31 downto 0);
 
-    signal instruction: STD_LOGIC_VECTOR(31 downto 0);
+    signal inst_ram_out: STD_LOGIC_VECTOR(31 downto 0);
     signal stall_pipeline: STD_LOGIC;
+    signal stall_delayed : STD_LOGIC := '0';
+    signal saved_instruction : STD_LOGIC_VECTOR(31 downto 0) := (others => '0');
     signal flush_pipeline: STD_LOGIC;
     signal flush_delayed: STD_LOGIC;
     signal data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
@@ -195,9 +198,27 @@ begin
         we => "0000",
         address => pc_reg(13 downto 2),
         data_in => inst_data_in,
-        data_out => instruction
+        data_out => inst_ram_out
     );
+    instruction_hold_proc: process(clk_90)
+    begin
+        if rising_edge(clk_90) then
+            if rst_btn = '1' then
+                stall_delayed <= '0';
+                saved_instruction <= x"00000013"; -- NOP
+            else
+                stall_delayed <= stall_pipeline;
+                -- If we just triggered a stall, save the instruction before it is lost
+                if stall_pipeline = '1' and stall_delayed = '0' then
+                    saved_instruction <= inst_ram_out;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    IF_ID_out.instruction <= saved_instruction when stall_delayed = '1' else inst_ram_out;
     
+
     ---------- ID STAGE ----------
 
     reg_file: entity work.reg_file
@@ -207,8 +228,8 @@ begin
     )
      port map(
         clk => clk_90,
-        rs1 => instruction(19 downto 15),
-        rs2 => instruction(24 downto 20),
+        rs1 => IF_ID_out.instruction(19 downto 15),
+        rs2 => IF_ID_out.instruction(24 downto 20),
         rd => MEM_WB_out.rd,
         we => MEM_WB_out.reg_we,
         data_in => reg_data_in,
@@ -218,7 +239,7 @@ begin
 
     control_unit: entity work.control_unit
      port map(
-        instruction => instruction,
+        instruction => IF_ID_out.instruction,
         imm_sel => imm_sel,
         ALU_src1 => ID_EX_in.ALU_src1,
         ALU_src2 => ID_EX_in.ALU_src2,
@@ -234,27 +255,27 @@ begin
 
     imm_gen_unit: entity work.imm_gen_unit
      port map(
-        instruction => instruction,
+        instruction => IF_ID_out.instruction,
         imm_sel => imm_sel,
         immediate => ID_EX_in.immediate
     );
 
     ID_EX_in.pc <= IF_ID_out.pc;
-    ID_EX_in.funct3 <= instruction(14 downto 12);
-    ID_EX_in.rs1 <= instruction(19 downto 15);
-    ID_EX_in.rs2 <= instruction(24 downto 20);
-    ID_EX_in.rd <= instruction(11 downto 7);
-    ID_EX_in.opcode <= instruction(6 downto 2);
+    ID_EX_in.funct3 <= IF_ID_out.instruction(14 downto 12);
+    ID_EX_in.rs1 <= IF_ID_out.instruction(19 downto 15);
+    ID_EX_in.rs2 <= IF_ID_out.instruction(24 downto 20);
+    ID_EX_in.rd <= IF_ID_out.instruction(11 downto 7);
+    ID_EX_in.opcode <= IF_ID_out.instruction(6 downto 2);
 
 
     ---------- EX STAGE ----------
      hazard_detection_unit: entity work.hazard_detection_unit
      port map(
-        IF_ID_opcode => instruction(6 downto 2),
+        IF_ID_opcode => IF_ID_out.instruction(6 downto 2),
         ID_EX_opcode => ID_EX_out.opcode,
         ID_EX_rd => ID_EX_out.rd,
-        IF_ID_rs1 => instruction(19 downto 15),
-        IF_ID_rs2 => instruction(24 downto 20),
+        IF_ID_rs1 => IF_ID_out.instruction(19 downto 15),
+        IF_ID_rs2 => IF_ID_out.instruction(24 downto 20),
         stall_pipeline => stall_pipeline
     );
 
