@@ -88,9 +88,8 @@ architecture rtl of datapath is
     signal next_pc: STD_LOGIC_VECTOR(31 downto 0);
 
     signal inst_ram_out: STD_LOGIC_VECTOR(31 downto 0);
+    signal inst_ram_en: STD_LOGIC;
     signal stall_pipeline: STD_LOGIC;
-    signal stall_delayed : STD_LOGIC := '0';
-    signal saved_instruction : STD_LOGIC_VECTOR(31 downto 0) := (others => '0');
     signal flush_pipeline: STD_LOGIC;
     signal flush_delayed: STD_LOGIC;
     signal data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
@@ -156,7 +155,6 @@ begin
                 
                 flush_delayed <= flush_pipeline; 
 
-                --if the pipeline is stalled, a NOP is inserted as the next instruction and the value of the PC remains the same
                 pc_reg <= next_pc when stall_pipeline = '0' or flush_pipeline = '1' else pc_reg;
                 IF_ID_out.pc <= pc_reg;
 
@@ -189,34 +187,22 @@ begin
 
 
     ---------- IF STAGE ----------
+    inst_ram_en <= not stall_pipeline;
+
     instruction_ram: entity work.ram
      generic map(
         ADDRESS_WIDTH => 12
     )
      port map(
         clk => clk_90,
-        we => "0000",
+        en => inst_ram_en,
+        write_en => "0000",
         address => pc_reg(13 downto 2),
         data_in => inst_data_in,
         data_out => inst_ram_out
     );
-    instruction_hold_proc: process(clk_90)
-    begin
-        if rising_edge(clk_90) then
-            if rst_btn = '1' then
-                stall_delayed <= '0';
-                saved_instruction <= x"00000013"; -- NOP
-            else
-                stall_delayed <= stall_pipeline;
-                -- If we just triggered a stall, save the instruction before it is lost
-                if stall_pipeline = '1' and stall_delayed = '0' then
-                    saved_instruction <= inst_ram_out;
-                end if;
-            end if;
-        end if;
-    end process;
 
-    IF_ID_out.instruction <= saved_instruction when stall_delayed = '1' else inst_ram_out;
+    IF_ID_out.instruction <= x"00000013" when (flush_delayed = '1' or flush_pipeline = '1') else inst_ram_out;
     
 
     ---------- ID STAGE ----------
@@ -381,7 +367,8 @@ begin
     )
      port map(
         clk => clk_90,
-        we => data_ram_we,
+        en => '1',
+        write_en => data_ram_we,
         address => EX_MEM_out.alu_out(13 downto 2),
         data_in => ram_data_in,
         data_out => data_mem_out
