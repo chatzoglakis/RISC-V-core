@@ -16,6 +16,7 @@ architecture rtl of datapath is
 
     constant FRAMEBUFFER_CONTROL_ADDRESS: STD_LOGIC_VECTOR(31 downto 0) := x"80000000";
     constant BUTTON_REG_ADDRESS: STD_LOGIC_VECTOR(31 downto 0) := x"80000004";
+    constant VGA_STATUS_ADDRESS: STD_LOGIC_VECTOR(31 downto 0) := x"80000008"; --Bit 0 of address = swap_pending (1 = Busy drawing, 0 = Ready to switch buffers)
 
     type IF_ID is record
         pc: STD_LOGIC_VECTOR(31 downto 0);
@@ -116,8 +117,11 @@ architecture rtl of datapath is
 
     signal vram_read_address: STD_LOGIC_VECTOR(17 downto 0);
     signal pixel_data: STD_LOGIC_VECTOR(7 downto 0);
-    signal async_framebuffer_sel : STD_LOGIC := '0';
-    signal sync_framebuffer_sel: STD_LOGIC := '0';
+    signal async_swap_request : STD_LOGIC := '0';
+    signal sync_swap_request: STD_LOGIC := '0';
+    signal async_swap_ack: STD_LOGIC;
+    signal sync_swap_ack: STD_LOGIC;
+    signal vga_status: STD_LOGIC := '0'; --0: free to change buffer, 1: busy reading the screen
 
     signal btn_reg: STD_LOGIC_VECTOR(3 downto 0);
 
@@ -385,32 +389,32 @@ begin
         data_b => pixel_data
     );
 
-    framebuffer_selection_proc: process(clk_90)
+    framebuffer_swap_request: process(clk_90)
     begin
         if rising_edge(clk_90) then
             if rst_btn = '1' then
-                async_framebuffer_sel <= '0';
-            -- Store instructions targeting 0x80000000 set the active framebuffer
+                async_swap_request <= '0';
+            -- Store instructions targeting FRAMEBUFFER_CONTROL_ADDRESS toggle the active framebuffer
             elsif EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = FRAMEBUFFER_CONTROL_ADDRESS then
-                -- Latch the Lowest Bit (LSB) of the CPU's register data
-                async_framebuffer_sel <= EX_MEM_out.reg_out2(0);
+                async_swap_request <= not async_swap_request;
             end if;
         end if;
     end process;
 
-    two_ff_synchronizer: entity work.two_ff_synchronizer
+    swap_request_synchronizer: entity work.two_ff_synchronizer
      port map(
         clk => clk_25,
         rst => rst_btn,
-        async_data => async_framebuffer_sel,
-        sync_data => sync_framebuffer_sel
+        async_data => async_swap_request,
+        sync_data => sync_swap_request
     );
 
     vga_controller: entity work.vga_controller
      port map(
         clk => clk_25,
         rst => rst_btn,
-        framebuffer_sel => sync_framebuffer_sel,
+        swap_request => sync_swap_request,
+        swap_ack => async_swap_ack,
         pixel_data => pixel_data,
         hsync => hsync,
         vsync => vsync,
@@ -419,6 +423,16 @@ begin
         g => g,
         b => b
     );
+
+    swap_ack_synchronizer: entity work.two_ff_synchronizer
+     port map(
+        clk => clk_90,
+        rst => rst_btn,
+        async_data => async_swap_ack,
+        sync_data => sync_swap_ack
+    );
+    
+    vga_status <= '0' when async_swap_request = sync_swap_ack else '1';
 
     MEM_WB_in.pc <= EX_MEM_out.pc;
     MEM_WB_in.rd <= EX_MEM_out.rd;
@@ -442,7 +456,16 @@ begin
     begin
         case MEM_WB_out.reg_data_src is
             when "00" => reg_data_in <= MEM_WB_out.alu_out; --ALU output
-            when "01" => reg_data_in <= mem_writeback_data when MEM_WB_out.alu_out /= BUTTON_REG_ADDRESS else x"0000000" & btn_reg; --Data Memory output or button reg output
+
+            when "01" => 
+                if MEM_WB_out.alu_out = VGA_STATUS_ADDRESS then
+                    reg_data_in <= (31 downto 1 => '0') & vga_status;
+                elsif MEM_WB_out.alu_out = BUTTON_REG_ADDRESS then
+                    reg_data_in <= x"0000000" & btn_reg;
+                else
+                    reg_data_in <= mem_writeback_data;
+                end if;
+
             when "10" => reg_data_in <= MEM_WB_out.immediate; --immediate
             when others => reg_data_in <= STD_LOGIC_VECTOR(unsigned(MEM_WB_out.pc) + 4); --PC
         end case;
