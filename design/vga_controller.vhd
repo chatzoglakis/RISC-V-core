@@ -7,7 +7,8 @@ entity vga_controller is
     port(
         clk, rst: in STD_LOGIC;
         pixel_data: in STD_LOGIC_VECTOR(7 downto 0);
-        framebuffer_sel: in STD_LOGIC;
+        swap_request: in STD_LOGIC;
+        swap_ack: out STD_LOGIC;
         hsync: out STD_LOGIC;
         vsync: out STD_LOGIC;
         read_address: out STD_LOGIC_VECTOR(17 downto 0);
@@ -23,9 +24,11 @@ architecture rtl of vga_controller is
     signal v_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
     signal h_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
     signal v_sync_reg: STD_LOGIC;
-    signal h_sync_reg : std_logic ;
+    signal h_sync_reg : std_logic;
     signal video_on: STD_LOGIC;
     signal pixel_addr_math : unsigned(17 downto 0);
+    signal active_framebuffer: STD_LOGIC := '0';
+    signal active_swap_ack: STD_LOGIC := '0';
 
 begin
 
@@ -38,8 +41,8 @@ begin
                 v_count <= (others => '0');
                 h_sync_reg <= '1';
                 v_sync_reg <= '1';
+                active_framebuffer <= '0';
             else
-                
 
                 --COUNTERS
                 if unsigned(h_count) = 799 then
@@ -53,6 +56,14 @@ begin
                     
                 else
                     h_count <= STD_LOGIC_VECTOR(unsigned(h_count) + 1);
+                end if;
+
+                -- Latch the incoming CPU request only at the VBLANK (line 480)
+                if unsigned(v_count) = 480 and unsigned(h_count) = 0 then
+                    if swap_request /= active_swap_ack then
+                        active_framebuffer <= not(active_framebuffer);
+                        active_swap_ack <= swap_request; -- Match the CPU state to acknowledge
+                    end if;
                 end if;
 
                 --SYNC SIGNALS
@@ -72,6 +83,7 @@ begin
         end if;
     end process;
 
+    swap_ack <= active_swap_ack;
     video_on <= '1' when (unsigned(h_count) < 640 and unsigned(v_count) < 480) else '0';
     
     hsync <= h_sync_reg;
@@ -86,7 +98,7 @@ begin
                     unsigned(pixel_y & "000000") + 
                     unsigned(pixel_x), 18);
 
-    read_address <= STD_LOGIC_VECTOR(pixel_addr_math + 76800) when framebuffer_sel = '1' 
+    read_address <= STD_LOGIC_VECTOR(pixel_addr_math + 76800) when active_framebuffer = '1' 
                 else STD_LOGIC_VECTOR(pixel_addr_math);
 
     coloring_proc:process(clk, rst) is
