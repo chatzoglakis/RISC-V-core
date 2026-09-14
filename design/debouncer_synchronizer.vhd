@@ -14,7 +14,7 @@ end debouncer_synchronizer;
 architecture rtl of debouncer_synchronizer is
 
 constant C_SHIFT_LEN: integer := 16;
-constant MAX_TICKS: integer := 9000;
+constant MAX_TICKS: integer := 90000;
 
 signal tick_count: integer range 0 to MAX_TICKS := 0;
 signal ce: STD_LOGIC;
