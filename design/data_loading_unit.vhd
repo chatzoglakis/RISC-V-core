@@ -13,6 +13,28 @@ end data_loading_unit;
 
 architecture rtl of data_loading_unit is
 
+    pure function extract_byte(byte_offset: STD_LOGIC_VECTOR(1 downto 0);
+                               data_mem_out: STD_LOGIC_VECTOR(31 downto 0)
+    ) return STD_LOGIC_VECTOR is
+    begin
+        case byte_offset is
+            when "00" => return data_mem_out(7 downto 0);
+            when "01" => return data_mem_out(15 downto 8);
+            when "10" => return data_mem_out(23 downto 16);
+            when others => return data_mem_out(31 downto 24);
+        end case;
+    end function;
+
+    pure function extract_halfword(byte_offset: STD_LOGIC_VECTOR(1 downto 0);
+                                   data_mem_out: STD_LOGIC_VECTOR(31 downto 0)
+    ) return STD_LOGIC_VECTOR is
+    begin
+        case byte_offset(1) is
+            when '0' => return data_mem_out(15 downto 0);
+            when others => return data_mem_out(31 downto 16);
+        end case;
+    end function;
+
 begin
 
     load_from_ram_proc: process(all)
@@ -23,37 +45,19 @@ begin
 
         case funct3 is
             when "000" => --LB
-                case byte_offset is
-                    when "00" => extracted_byte := data_mem_out(7 downto 0);
-                    when "01" => extracted_byte := data_mem_out(15 downto 8);
-                    when "10" => extracted_byte := data_mem_out(23 downto 16);
-                    when others => extracted_byte := data_mem_out(31 downto 24);
-                end case;
+                extracted_byte := extract_byte(byte_offset, data_mem_out);
                 mem_writeback_data <= (31 downto 8 => extracted_byte(7)) & extracted_byte;
             
             when "001" => --LH
-                if byte_offset(1) = '0' then
-                    extracted_half := data_mem_out(15 downto 0);
-                else
-                    extracted_half := data_mem_out(31 downto 16);
-                end if;
+                extracted_half := extract_halfword(byte_offset, data_mem_out);
                 mem_writeback_data <= (31 downto 16 => extracted_half(15)) & extracted_half;
 
             when "100" => --LBU
-                case byte_offset is
-                    when "00" => extracted_byte := data_mem_out(7 downto 0);
-                    when "01" => extracted_byte := data_mem_out(15 downto 8);
-                    when "10" => extracted_byte := data_mem_out(23 downto 16);
-                    when others => extracted_byte := data_mem_out(31 downto 24);
-                end case;
+                extracted_byte := extract_byte(byte_offset, data_mem_out);
                 mem_writeback_data <= (31 downto 8 => '0') & extracted_byte;
 
             when "101" => --LHU
-                if byte_offset(1) = '0' then
-                    extracted_half := data_mem_out(15 downto 0);
-                else
-                    extracted_half := data_mem_out(31 downto 16);
-                end if;
+                extracted_half := extract_halfword(byte_offset, data_mem_out);
                 mem_writeback_data <= (31 downto 16 => '0') & extracted_half;
 
             when others => null;
