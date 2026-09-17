@@ -112,16 +112,8 @@ architecture rtl of datapath is
     signal forwarded_rs1: STD_LOGIC_VECTOR(31 downto 0);
 
     signal vram_we: STD_LOGIC;
-    signal address_a: STD_LOGIC_VECTOR(17 downto 0);
-    signal data_a: STD_LOGIC_VECTOR(7 downto 0);
-
-    signal vram_read_address: STD_LOGIC_VECTOR(17 downto 0);
-    signal pixel_data: STD_LOGIC_VECTOR(7 downto 0);
-    signal async_swap_request : STD_LOGIC := '0';
-    signal sync_swap_request: STD_LOGIC := '0';
-    signal async_swap_ack: STD_LOGIC;
-    signal sync_swap_ack: STD_LOGIC;
     signal vga_status: STD_LOGIC := '0'; --0: free to change buffer, 1: busy reading the screen
+    signal swap_trigger: STD_LOGIC := '0';
 
     signal btn_reg: STD_LOGIC_VECTOR(3 downto 0);
 
@@ -377,62 +369,26 @@ begin
         data_in => ram_data_in,
         data_out => data_mem_out
     );
+    
+    -- Store instructions targeting FRAMEBUFFER_CONTROL_ADDRESS toggle the active framebuffer
+    swap_trigger <= '1' when EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = FRAMEBUFFER_CONTROL_ADDRESS else '0';
 
-    vram: entity work.vram
+    video_subsystem: entity work.video_subsystem
      port map(
-        clk_a => clk_90,
-        we_a => vram_we,
-        address_a => EX_MEM_out.alu_out(17 downto 0),
-        data_a => ram_data_in(7 downto 0),
-        clk_b => clk_25,
-        address_b => vram_read_address,
-        data_b => pixel_data
-    );
-
-    framebuffer_swap_request: process(clk_90)
-    begin
-        if rising_edge(clk_90) then
-            if rst_btn = '1' then
-                async_swap_request <= '0';
-            -- Store instructions targeting FRAMEBUFFER_CONTROL_ADDRESS toggle the active framebuffer
-            elsif EX_MEM_out.is_store_inst = '1' and EX_MEM_out.alu_out = FRAMEBUFFER_CONTROL_ADDRESS then
-                async_swap_request <= not async_swap_request;
-            end if;
-        end if;
-    end process;
-
-    swap_request_synchronizer: entity work.two_ff_synchronizer
-     port map(
-        clk => clk_25,
+        clk_90 => clk_90,
+        clk_25 => clk_25,
         rst => rst_btn,
-        async_data => async_swap_request,
-        sync_data => sync_swap_request
-    );
-
-    vga_controller: entity work.vga_controller
-     port map(
-        clk => clk_25,
-        rst => rst_btn,
-        swap_request => sync_swap_request,
-        swap_ack => async_swap_ack,
-        pixel_data => pixel_data,
+        vram_we => vram_we,
+        write_address => EX_MEM_out.alu_out(17 downto 0),
+        vram_data_in => ram_data_in,
+        swap_trigger => swap_trigger,
         hsync => hsync,
         vsync => vsync,
-        read_address => vram_read_address,
+        vga_status => vga_status,
         r => r,
         g => g,
         b => b
     );
-
-    swap_ack_synchronizer: entity work.two_ff_synchronizer
-     port map(
-        clk => clk_90,
-        rst => rst_btn,
-        async_data => async_swap_ack,
-        sync_data => sync_swap_ack
-    );
-    
-    vga_status <= '0' when async_swap_request = sync_swap_ack else '1';
 
     MEM_WB_in.pc <= EX_MEM_out.pc;
     MEM_WB_in.rd <= EX_MEM_out.rd;
