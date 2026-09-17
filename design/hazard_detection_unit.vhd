@@ -18,17 +18,31 @@ architecture rtl of hazard_detection_unit is
     constant S_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01000";
     constant B_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "11000";
     constant R_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01100";
-    constant I_ALU_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "00100"; -- ADDI, SLTI, etc.
+    constant JAL: STD_LOGIC_VECTOR(4 downto 0) := "11011";
     constant LOAD: STD_LOGIC_VECTOR(4 downto 0) := "00000";
+    constant AUIPC: STD_LOGIC_VECTOR(4 downto 0) := "00101";
     constant LUI: STD_LOGIC_VECTOR(4 downto 0) := "01101";
+
+    --checks if IF_ID instruction has a valid rs1 field
+    pure function has_rs1(IF_ID_opcode: STD_LOGIC_VECTOR(4 downto 0)) return boolean is
+    begin
+        return (IF_ID_opcode /= AUIPC and IF_ID_opcode /= JAL and IF_ID_opcode /= LUI);
+    end function;
+
+    --checks if IF_ID instruction has a valid rs2 field
+    pure function has_rs2(IF_ID_opcode: STD_LOGIC_VECTOR(4 downto 0)) return boolean is
+    begin
+        return (IF_ID_opcode = R_TYPE or IF_ID_opcode = B_TYPE or IF_ID_opcode = S_TYPE);
+    end function;
     
 begin
 
     process(all)
     begin
-        if (ID_EX_opcode = LOAD or ID_EX_opcode = LUI) and 
-           (ID_EX_rd = IF_ID_rs1 or ( ID_EX_rd = IF_ID_rs2 and (IF_ID_opcode = R_TYPE or IF_ID_opcode = B_TYPE or IF_ID_opcode = S_TYPE or IF_ID_opcode = I_ALU_TYPE))) 
-           and ID_EX_rd /= "00000" then
+        if (ID_EX_opcode = LOAD) and 
+           ((ID_EX_rd = IF_ID_rs1 and has_rs1(IF_ID_opcode)) or 
+           ( ID_EX_rd = IF_ID_rs2 and has_rs2(IF_ID_opcode))) and 
+           ID_EX_rd /= "00000" then
 
             stall_pipeline <= '1';
         else
