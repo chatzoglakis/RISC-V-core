@@ -21,38 +21,50 @@ architecture rtl of forwarding_unit is
     constant S_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01000";
     constant B_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "11000";
     constant R_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "01100";
-    constant I_ALU_TYPE: STD_LOGIC_VECTOR(4 downto 0) := "00100"; -- ADDI, SLTI, etc.
+    constant JAL: STD_LOGIC_VECTOR(4 downto 0) := "11011";
+    constant LOAD: STD_LOGIC_VECTOR(4 downto 0) := "00000";
+    constant AUIPC: STD_LOGIC_VECTOR(4 downto 0) := "00101";
+    constant LUI: STD_LOGIC_VECTOR(4 downto 0) := "01101";
+
+     --checks if IF_ID instruction has a valid rs1 field
+    pure function has_rs1(IF_ID_opcode: STD_LOGIC_VECTOR(4 downto 0)) return boolean is
+    begin
+        return (IF_ID_opcode /= AUIPC and IF_ID_opcode /= JAL and IF_ID_opcode /= LUI);
+    end function;
+
+    --checks if IF_ID instruction has a valid rs2 field
+    pure function has_rs2(IF_ID_opcode: STD_LOGIC_VECTOR(4 downto 0)) return boolean is
+    begin
+        return (IF_ID_opcode = R_TYPE or IF_ID_opcode = B_TYPE or IF_ID_opcode = S_TYPE);
+    end function;
 
 begin
 
     process(all)
-        variable forwarded_A_in_EX_MEM: std_logic;
-        variable forwarded_B_in_EX_MEM: std_logic;
+        variable forwarded_A_in_EX_MEM: std_logic := '0';
+        variable forwarded_B_in_EX_MEM: std_logic := '0';
     begin
         forward_A <= "00";
         forward_B <= "00";
 
-        forwarded_A_in_EX_MEM := '0';
-        forwarded_B_in_EX_MEM := '0';
-
         if EX_MEM_reg_we = '1' and EX_MEM_rd /= "00000" then
-            if EX_MEM_rd = ID_EX_rs1 then
+            if EX_MEM_rd = ID_EX_rs1 and has_rs1(ex_stage_opcode) then
                 forward_A <= "01";
                 forwarded_A_in_EX_MEM := '1';
             end if;
 
-            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE or ex_stage_opcode = I_ALU_TYPE) and EX_MEM_rd = ID_EX_rs2 then
+            if EX_MEM_rd = ID_EX_rs2 and has_rs2(ex_stage_opcode) then
                 forward_B <= "01";
                 forwarded_B_in_EX_MEM := '1';
             end if;
         end if;
 
         if MEM_WB_reg_we = '1' and MEM_WB_rd /= "00000" then
-            if MEM_WB_rd = ID_EX_rs1 and forwarded_A_in_EX_MEM = '0' then
+            if MEM_WB_rd = ID_EX_rs1 and has_rs1(ex_stage_opcode) and forwarded_A_in_EX_MEM = '0' then
                 forward_A <= "10";
             end if;
 
-            if (ex_stage_opcode = R_TYPE or ex_stage_opcode = B_TYPE or ex_stage_opcode = S_TYPE or ex_stage_opcode = I_ALU_TYPE) and MEM_WB_rd = ID_EX_rs2 and forwarded_B_in_EX_MEM = '0' then
+            if MEM_WB_rd = ID_EX_rs2 and has_rs2(ex_stage_opcode) and forwarded_B_in_EX_MEM = '0' then
                 forward_B <= "10";
             end if;
         end if;
