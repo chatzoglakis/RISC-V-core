@@ -15,8 +15,7 @@ architecture rtl of uart_receiver is
 
     constant BAUD_RATE: integer := 38_400;
     constant CLK_FREQ: integer := 90_000_000;
-    --constant MAX: integer := CLK_FREQ /BAUD_RATE --use 2 for simulation;
-    constant MAX: integer := 2;
+    constant MAX: integer := CLK_FREQ /BAUD_RATE --use 2 for simulation;
 
     type state_type is (IDLE, RECEIVE_START_BIT, RECEIVE_DATA, RECEIVE_STOP_BIT);
 
