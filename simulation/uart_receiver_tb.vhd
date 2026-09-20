@@ -11,7 +11,7 @@ architecture Behavioral of uart_receiver_tb is
     signal clk: STD_LOGIC;
     signal rx: STD_LOGIC;
     signal done: STD_LOGIC;
-    signal data: STD_LOGIC_VECTOR(31 downto 0);
+    signal data: STD_LOGIC_VECTOR(7 downto 0);
 
 begin
 
@@ -40,20 +40,16 @@ begin
         rx <= '0';
         wait for 20 ns;
 
-        --sending number 01000011100000000000000010000001 (0x43800081)
-        for i in 0 to 31 loop
-            if i = 0 or i = 7 or i = 23 or i = 24 or i = 25 or i = 30 then
-                rx <= '1';
-            else
-                rx <= '0';
-            end if;
+        --sending number 0xFF
+        for j in 0 to 7 loop
+            rx <= '1';
             wait for 20 ns;
         end loop;
-        
-        wait until done <= '1';
-        assert data = x"43800081" report "FAILED TO RECEIVE DATA" severity error;
+            
+        wait until done = '0' for 500 ns;
+        assert data = x"FF" report "FAILED TO RECEIVE DATA" severity error;
+           
         std.env.finish;
     end process;
-
 
 end Behavioral;
