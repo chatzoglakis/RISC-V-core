@@ -46,14 +46,22 @@ begin
         prog_mode <= '1';
         rx <= '0';
         wait for 15 ns;
-        for i in 0 to 31 loop
+
+        --sending number 0xFFFFFFFF
+        for i in 0 to 3 loop
+            for j in 0 to 7 loop
+                rx <= '1';
+                wait for BAUD_PERIOD;
+            end loop;
+
+            wait until we = "1111" for 1 ms;
             rx <= '1';
-            wait for BAUD_PERIOD;
+            wait for 20 ns;
+            rx <= '0';
+            wait for BAUD_PERIOD / 2; 
         end loop;
-        wait until we = "1111" for 1 ms;
+                
         assert instruction = x"FFFFFFFF" report "FAILED TO LOAD INSTRUCTION" severity error;
-        
-        wait until we = "0000" for 1 ms;
         assert unsigned(address) = 1 report "FAILED TO CHANGE ADDRESS" severity error;
         
         std.env.finish;
