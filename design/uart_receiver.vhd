@@ -7,13 +7,13 @@ entity uart_receiver is
         clk: in STD_LOGIC;
         rx: in STD_LOGIC;
         done: out STD_LOGIC;
-        data: out STD_LOGIC_VECTOR(31 downto 0)
+        data: out STD_LOGIC_VECTOR(7 downto 0)
     );
 end uart_receiver;
 
 architecture rtl of uart_receiver is
 
-    constant BAUD_RATE: integer := 38_400;
+    constant BAUD_RATE: integer := 115_200;
     constant CLK_FREQ: integer := 90_000_000;
     constant MAX: integer := CLK_FREQ /BAUD_RATE; --use 2 for simulation;
 
@@ -21,10 +21,8 @@ architecture rtl of uart_receiver is
 
     signal state: state_type := IDLE;
     signal baud_count: integer range 0 to MAX - 1 := 0;
-    signal shift_reg: STD_LOGIC_VECTOR(31 downto 0) := (others => '0');
-    signal curr_bit: integer range 0 to 31 := 0;
-
-    
+    signal shift_reg: STD_LOGIC_VECTOR(7 downto 0) := (others => '0');
+    signal curr_bit: integer range 0 to 7 := 0;
 
 begin
 
@@ -52,7 +50,7 @@ begin
 
                 when RECEIVE_DATA =>
                     if baud_count = MAX - 1 then
-                        shift_reg <= rx & shift_reg(31 downto 1);
+                        shift_reg <= rx & shift_reg(7 downto 1);
                         baud_count <= 0;
                         
                         if curr_bit = 31 then
@@ -79,5 +77,5 @@ begin
                 
     end process;
 
-
 end rtl;
+
