@@ -6,6 +6,8 @@ entity datapath is
     port(
         clk: in STD_LOGIC;
         rst_btn: in STD_LOGIC;
+        prog_mode: in STD_LOGIC;
+        rx: in STD_LOGIC;
         raw_btn_input: in STD_LOGIC_VECTOR(3 downto 0);
         hsync, vsync: out STD_LOGIC;
         r,g,b: out STD_LOGIC_VECTOR(3 downto 0)
@@ -100,7 +102,6 @@ architecture rtl of datapath is
     signal imm_sel: std_logic_vector (2 downto 0);
     signal data_ram_we: STD_LOGIC_VECTOR(3 downto 0);
     signal ram_data_in: STD_LOGIC_VECTOR(31 downto 0);
-    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
     signal reg_data_in: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_a: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_b: STD_LOGIC_VECTOR(31 downto 0);
@@ -116,6 +117,13 @@ architecture rtl of datapath is
     signal swap_trigger: STD_LOGIC := '0';
 
     signal btn_reg: STD_LOGIC_VECTOR(3 downto 0);
+
+    signal loader_address: STD_LOGIC_VECTOR(11 downto 0);
+    signal inst_ram_we: STD_LOGIC_VECTOR(3 downto 0);
+    signal inst_ram_address: STD_LOGIC_VECTOR(11 downto 0);
+    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
+
+    signal rst: STD_LOGIC;
 
     component clk_wiz_0 is
         port (
@@ -134,10 +142,12 @@ begin
             clk_out2 => clk_25 -- VGA controller's 25.2 MHz clock 
         );
 
+    rst <= rst_btn or prog_mode;
+
     pipeline_registers: process(clk_90)
     begin
         if rising_edge(clk_90) then
-            if rst_btn = '1' then
+            if rst = '1' then
                 pc_reg <= (others => '0');
                 
                 ID_EX_out.reg_we <= '0';
@@ -181,10 +191,20 @@ begin
         end if;
     end process;
 
+    program_loader: entity work.program_loader
+     port map(
+        clk => clk_90,
+        prog_mode => prog_mode,
+        rx => rx,
+        instruction => inst_data_in,
+        address => loader_address,
+        we => inst_ram_we
+    );
+
 
     ---------- IF STAGE ----------
     inst_ram_en <= not stall_pipeline;
-
+    inst_ram_address <= pc_reg(13 downto 2) when prog_mode = '0' else loader_address;
     instruction_ram: entity work.ram
      generic map(
         ADDRESS_WIDTH => 12
@@ -192,8 +212,8 @@ begin
      port map(
         clk => clk_90,
         en => inst_ram_en,
-        write_en => "0000",
-        address => pc_reg(13 downto 2),
+        write_en => inst_ram_we,
+        address => inst_ram_address,
         data_in => inst_data_in,
         data_out => inst_ram_out
     );
@@ -377,10 +397,10 @@ begin
      port map(
         clk_90 => clk_90,
         clk_25 => clk_25,
-        rst => rst_btn,
+        rst => rst,
         vram_we => vram_we,
         write_address => EX_MEM_out.alu_out(17 downto 0),
-        vram_data_in => ram_data_in,
+        vram_data_in => ram_data_in(7 downto 0),
         swap_trigger => swap_trigger,
         hsync => hsync,
         vsync => vsync,
@@ -389,6 +409,7 @@ begin
         g => g,
         b => b
     );
+
 
     MEM_WB_in.pc <= EX_MEM_out.pc;
     MEM_WB_in.rd <= EX_MEM_out.rd;
@@ -411,7 +432,7 @@ begin
     reg_input_proc: process(all)
     begin
         case MEM_WB_out.reg_data_src is
-            when "00" => reg_data_in <= MEM_WB_out.alu_out; --ALU output
+            when "00" => reg_data_in <= MEM_WB_out.alu_out;
 
             when "01" => 
                 if MEM_WB_out.alu_out = VGA_STATUS_ADDRESS then
@@ -432,7 +453,7 @@ begin
         debouncer_synchronizer: entity work.debouncer_synchronizer
             port map(
                     clk => clk_90,
-                    rst => rst_btn,
+                    rst => rst,
                     btn_in => raw_btn_input(i),
                     btn_state => btn_reg(i)
                 );
