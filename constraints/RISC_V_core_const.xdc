@@ -1,5 +1,10 @@
-set_false_path -from [get_cells async_swap_request_reg] -to [get_cells swap_request_synchronizer/sync_ff_1_reg]
-set_false_path -from [get_cells vga_controller/active_swap_ack_reg] -to [get_cells swap_ack_synchronizer/sync_ff_1_reg]
+set_false_path \
+    -from [get_cells -hier -filter {NAME =~ *async_swap_request_reg*}] \
+    -to   [get_cells -hier -filter {NAME =~ *swap_request_synchronizer*}]
+
+set_false_path \
+    -from [get_cells -hier -filter {NAME =~ *async_swap_ack_reg* || NAME =~ *vga_controller*swap_ack*}] \
+    -to   [get_cells -hier -filter {NAME =~ *swap_ack_synchronizer*}]
 
 ##Clock signal
 set_property -dict { PACKAGE_PIN K17   IOSTANDARD LVCMOS33 } [get_ports { clk }]; #IO_L12P_T1_MRCC_35 Sch=sysclk
@@ -33,3 +38,5 @@ set_property -dict { PACKAGE_PIN R14   IOSTANDARD LVCMOS33     } [get_ports { g[
 set_property -dict { PACKAGE_PIN U14   IOSTANDARD LVCMOS33     } [get_ports { hsync }]; 
 set_property -dict { PACKAGE_PIN U15   IOSTANDARD LVCMOS33     } [get_ports { vsync }];
 
+##Pmod Header JE                                                                                                                  
+set_property -dict { PACKAGE_PIN V12   IOSTANDARD LVCMOS33 } [get_ports { rx }];
