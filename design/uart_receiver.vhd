@@ -53,7 +53,7 @@ begin
                         shift_reg <= rx & shift_reg(7 downto 1);
                         baud_count <= 0;
                         
-                        if curr_bit = 31 then
+                        if curr_bit = 7 then
                             state <= RECEIVE_STOP_BIT;
                         else
                             curr_bit <= curr_bit + 1;
