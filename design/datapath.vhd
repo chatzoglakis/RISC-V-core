@@ -149,6 +149,7 @@ begin
         if rising_edge(clk_90) then
             if rst = '1' then
                 pc_reg <= (others => '0');
+                IF_ID_out.pc <= (others => '0');
                 
                 ID_EX_out.reg_we <= '0';
                 EX_MEM_out.reg_we <= '0';
@@ -156,13 +157,13 @@ begin
                 ID_EX_out.is_store_inst <= '0';
                 flush_delayed <= '0';
             else
-                --This design predicts that a branch is not taken until the branch is resolved
-                --Branch resolution happens at the MEM stage, meaning that the 3 stages before need to be flushed if branch is taken
                 
                 flush_delayed <= flush_pipeline; 
 
-                pc_reg <= next_pc when stall_pipeline = '0' or flush_pipeline = '1' else pc_reg;
-                IF_ID_out.pc <= pc_reg;
+                if stall_pipeline = '0' or flush_pipeline = '1' then
+                    pc_reg <= next_pc;
+                    IF_ID_out.pc <= pc_reg;
+                end if;
 
                 if stall_pipeline = '1' or flush_pipeline = '1' or flush_delayed = '1' then
                     ID_EX_out <= ID_EX_in;
@@ -295,9 +296,21 @@ begin
     );
 
     alu_input_selection_proc: process(all)
+        variable ex_mem_data: STD_LOGIC_VECTOR(31 downto 0);
     begin
+        -- If the instruction in EX/MEM is LUI (reg_data_src = "10"), forward its immediate
+        --If it's JAL (reg_data_src = "11"), forward the pc value
+        --otherwise forward the ALU result.
+        if EX_MEM_out.reg_data_src = "10" then
+            ex_mem_data := EX_MEM_out.immediate;
+        elsif EX_MEM_out.reg_data_src = "11" then
+            ex_mem_data := STD_LOGIC_VECTOR(unsigned(EX_MEM_out.pc) + 4); -- For JAL/JALR
+        else
+            ex_mem_data := EX_MEM_out.alu_out;
+        end if;
+
         case forward_A is
-            when "01" => forwarded_rs1 <= EX_MEM_out.alu_out; -- forwarded value from EX_MEM register
+            when "01" => forwarded_rs1 <= ex_mem_data; -- forwarded value from EX_MEM register
             --forwarded value from WB stage (reg_data_in could be the ALU's output, an immediate, data from memory or the PC value, depending on the instruction)
             when "10" => forwarded_rs1 <= reg_data_in; 
             when others => forwarded_rs1 <= ID_EX_out.reg_out1; -- regular ALU insput selection
@@ -443,8 +456,8 @@ begin
                     reg_data_in <= mem_writeback_data;
                 end if;
 
-            when "10" => reg_data_in <= MEM_WB_out.immediate; --immediate
-            when others => reg_data_in <= STD_LOGIC_VECTOR(unsigned(MEM_WB_out.pc) + 4); --PC
+            when "10" => reg_data_in <= MEM_WB_out.immediate;
+            when others => reg_data_in <= STD_LOGIC_VECTOR(unsigned(MEM_WB_out.pc) + 4);
         end case;
     end process;
 
