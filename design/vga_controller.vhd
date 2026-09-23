@@ -22,7 +22,7 @@ architecture rtl of vga_controller is
     signal pixel_y : std_logic_vector (8 downto 0);
 
     signal v_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
-    signal h_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0');
+    signal h_count: STD_LOGIC_VECTOR(9 downto 0) := (others => '0'); 
     signal v_sync_reg: STD_LOGIC;
     signal h_sync_reg : std_logic;
     signal video_on: STD_LOGIC;
@@ -42,6 +42,7 @@ begin
                 h_sync_reg <= '1';
                 v_sync_reg <= '1';
                 active_framebuffer <= '0';
+                active_swap_ack <= '0';
             else
 
                 --COUNTERS
