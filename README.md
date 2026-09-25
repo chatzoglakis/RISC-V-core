@@ -1,6 +1,6 @@
-### Bare-Metal C Software Constraints (Harvard Architecture)
+### Software Constraints
 
-The CPU uses a Harvard memory architecture with separate Instruction RAM and Data RAM. Because the UART program loader targets Instruction RAM exclusively and no C runtime copy routine is present, the following software guidelines apply:
+The CPU uses a Harvard memory architecture with separate Instruction RAM and Data RAM. Because the UART program loader targets Instruction RAM exclusively and no C runtime copy routine is present, the following rules should be followed when programming the CPU:
 
 1. **Avoid Global const Arrays and Lookup Tables:**
    - Any data placed in `.rodata` (read only data) cannot be accessed via `lw` (loads target Data RAM, while `.rodata` resides in Instruction RAM).
