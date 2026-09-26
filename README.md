@@ -8,7 +8,7 @@ This repo includes a VHDL design for a standard 5 stage pipelined RISC V CPU cor
 >To stream software binaries straight into the FPGA fabric without routing through the ARM processor, an Arduino Uno is repurposed as a transparent hardware bridge. A dedicated PMOD USB-UART module could also be used instead.
 
 ## CPU Overview
-The CPU includes the following "modules":
+The CPU includes the following parts:
 - A **16KB Instruction RAM**
 - The **Program Loader**, that receives instructions via UART and loads them into the Instruction RAM
 - The **Immediate Generation Unit**, that creates appropriate immediate values based on the received instruction
@@ -20,17 +20,28 @@ The CPU includes the following "modules":
 - The **Branch Condition Unit**, that resolves branches and flushes the pipeline
 - A 16KB **Data RAM**
 - The **Store Alignment Unit**, that formats data ram input appropriately for each store instruction (sw, sh, sb)
-- The **Video Subsystem**, responsible for video output. Described in depth in the next section
+- The **Video Subsystem**, responsible for video output. Described in depth in further below
 - The **Data Loading Unit**, that formats data ram output appropriately for each load instruction (lw, lh, lb)
 
+## Hazard Handling (flushing and stalling)
+### Data hazards
+The only data hazards that can occur in a standard 5 stage pipeline are RAW (read after write) hazards. These are handled by the forwarding Unit as mentioned above. But in the case of Load-Use hazards, forwarding is not enough, and the pipeline must be stalled via the Hazard Detection Unit. This would easily happen in an asynchronous RAM system, by replacing the instruction of the IF stage with a NOP. However, the FPGA block RAM is synchronous, which requires a slightly different approach.
+
+Normally the Hazard Detection Unit would compare the IF and ID stages. However, since the IF stage is effectively "inside" of the instruction RAM when using synchronous memory, the comparison must happen between the ID and EX stages. When a Load-Use hazard is detected (meaning a load instruction is at the EX stage while a use instruction that reads the from the resgister that's about to be loaded follows at the ID stage) the ID_EX pipeline register is cleared in the **next** clock cycle, in order to turn the "Use" instruction to a NOP. Furthermore, the PC doesn't increment and the instruction RAM's enable signal is set to 0, to ensure that the same "Use" instruction is outputed again. This successfully puts a "bubble" between the load and use instructions, allowing the load instruction to forward its register value to the use one, when the former is at the WB stage and the latter at the EX stage.
+
+### Control Hazards
+When it comes to conditional branches, the CPU initially assumes that a branch is not taken until the branch instruction is resolved, and flushes the pipeline if the branch ends up being taken. Branch resolution would ideally happen in the EX stage, where the register comparison and address calculations happen. However, to avoid timing issues caused by the EX stage becoming too large, the Branch Condition Unit is placed at the MEM stage.
+
+That means that when flushing the pipeline, the IF_ID, ID_EX and EX_MEM registers must be cleared. Since the IF stage is "inside" of the synchronous instruction RAM as mentioned above, the CPU msut wait another cycle to clear the IF_ID pipeline register again, that way all stages are cleared and the program can continue normally
+
 ## Video Subsystem
-The Video Subsystem consists of a VRAM circuit, which is just a dual ported byte addressable RAM. The chosen display size is **320*240**, making the total size of the VRAM 153600 bytes (each byte corresponding to a pixel), since the design is double buffered to prevent screen tearing (there are 2 buffers of 76800 bytes). 
+The Video Subsystem consists of a VRAM circuit, which is just a dual ported byte addressable RAM, and the VGA Controller. The chosen display size is **320*240**, making the total size of the VRAM 153600 bytes (each byte corresponding to a pixel), since the design is double buffered to prevent screen tearing (there are 2 buffers of 76800 bytes). 
 
 The CPU writes to VRAM at specific addresses through regular store instructions. To avoid conflict with the DATA RAM, which ranges from `0x0` to `0x4000`, address `0x40000000` was chosen as the start of the VRAM. That means that by looking at bit 30 of the address value of a store instruction:
 - The Store Alignment Unit stores the chosen data at the Data RAM when bit 30 of the address is 0
 - The Store Alignment Unit stores the chosen data at the VRAM when bit 30 of the address is 1
 
-The VGA controller reads each byte from the VRAM in order, constructs the specific rgb value based on the bytes value, and displays the color on the screen.
+The VGA controller reads each byte from the VRAM in order, constructs the specific rgb value based on the bytes value, and displays the color on the screen for each byte/pixel.
 
 ### CPU and VGA Controller Communication
 To achieve correct video output with a double buffer, we need to ensure that the buffer being displayed at any moment and the buffer being written on by the CPU are always different. That means that the faster (90MHz) CPU would have to wait until the slower (25.2 MHz) VGA controller is done displaying a buffer to request a swap. This is the exact process the system follows:
