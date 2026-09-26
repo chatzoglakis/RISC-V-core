@@ -1,4 +1,4 @@
-This repo includes a VHDL design for a standard 5 stage pipelined RISC V CPU core, running at 90 MHz, that implements the RV32I ISA. It also supports 4 button inputs as well as VGA output through a dedicated video subsystem. There is also a constraint file for implementation on the Zybo Z7 10 FPGA, testbenches and a pong program written in C that was used to test the CPU.
+This repo includes a VHDL design for a standard 5 stage pipelined RISC V CPU core, running at a clock rate of 90 MHz, that implements the RV32I ISA. It also supports 4 button inputs as well as VGA output through a dedicated video subsystem. There is also a constraint file for implementation on the Zybo Z7 10 FPGA, testbenches and a pong program written in C that was used to test the CPU.
 
 ## Hardware Used
 - Zybo Z7 10 FPGA
