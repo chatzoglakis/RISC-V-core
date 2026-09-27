@@ -75,7 +75,6 @@ architecture rtl of datapath is
     signal clk_90 : STD_LOGIC;
     signal clk_25 : STD_LOGIC;
 
-    signal IF_ID_in: IF_ID;
     signal IF_ID_out: IF_ID;
 
     signal ID_EX_in: ID_EX;
@@ -90,40 +89,55 @@ architecture rtl of datapath is
     signal pc_reg: STD_LOGIC_VECTOR(31 downto 0);
     signal next_pc: STD_LOGIC_VECTOR(31 downto 0);
 
+    signal rst: STD_LOGIC;
+
+    --Instruction RAM signals
     signal inst_ram_out: STD_LOGIC_VECTOR(31 downto 0);
     signal inst_ram_en: STD_LOGIC;
+    signal inst_ram_we: STD_LOGIC_VECTOR(3 downto 0);
+    signal inst_ram_address: STD_LOGIC_VECTOR(11 downto 0);
+    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
+    signal loader_address: STD_LOGIC_VECTOR(11 downto 0);
+
+    --Data RAM signals
+    signal data_ram_we: STD_LOGIC_VECTOR(3 downto 0);
+    signal ram_data_in: STD_LOGIC_VECTOR(31 downto 0);
+    signal data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
+    signal mem_writeback_data: STD_LOGIC_VECTOR(31 downto 0);
+
+    --Register File signals
+    signal reg_data_in: STD_LOGIC_VECTOR(31 downto 0);
+
+    --Hazard handling signals
     signal stall_pipeline: STD_LOGIC;
     signal flush_pipeline: STD_LOGIC;
     signal flush_delayed: STD_LOGIC;
-    signal data_mem_out: STD_LOGIC_VECTOR(31 downto 0);
+
+    --Branch handling signals
     signal branch_adder_result: STD_LOGIC_VECTOR(31 downto 0);
     signal take_branch: STD_LOGIC;
+
+    --ALU signals
     signal alu_out: STD_LOGIC_VECTOR(31 downto 0);
-    signal imm_sel: std_logic_vector (2 downto 0);
-    signal data_ram_we: STD_LOGIC_VECTOR(3 downto 0);
-    signal ram_data_in: STD_LOGIC_VECTOR(31 downto 0);
-    signal reg_data_in: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_a: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_b: STD_LOGIC_VECTOR(31 downto 0);
     signal alu_shamt: STD_LOGIC_VECTOR(4 downto 0);
-    signal mem_writeback_data: STD_LOGIC_VECTOR(31 downto 0);
+
+    --Forwarding signals
     signal forward_A: STD_LOGIC_VECTOR(1 downto 0);
     signal forward_B: STD_LOGIC_VECTOR(1 downto 0);
     signal forwarded_rs2: STD_LOGIC_VECTOR(31 downto 0);
     signal forwarded_rs1: STD_LOGIC_VECTOR(31 downto 0);
 
+    --Video Subsystem signals
     signal vram_we: STD_LOGIC;
     signal vga_status: STD_LOGIC := '0'; --0: free to change buffer, 1: busy reading the screen
     signal swap_trigger: STD_LOGIC := '0';
 
+    signal imm_sel: std_logic_vector (2 downto 0);
     signal btn_reg: STD_LOGIC_VECTOR(3 downto 0);
 
-    signal loader_address: STD_LOGIC_VECTOR(11 downto 0);
-    signal inst_ram_we: STD_LOGIC_VECTOR(3 downto 0);
-    signal inst_ram_address: STD_LOGIC_VECTOR(11 downto 0);
-    signal inst_data_in: STD_LOGIC_VECTOR(31 downto 0);
-
-    signal rst: STD_LOGIC;
+    
 
     component clk_wiz_0 is
         port (
@@ -151,11 +165,25 @@ begin
                 pc_reg <= (others => '0');
                 IF_ID_out.pc <= (others => '0');
                 
-                ID_EX_out.reg_we <= '0';
-                EX_MEM_out.reg_we <= '0';
-                MEM_WB_out.reg_we <= '0';
+                ID_EX_out.reg_we        <= '0';
+                ID_EX_out.branch_en     <= '0';
+                ID_EX_out.jump          <= '0';
                 ID_EX_out.is_store_inst <= '0';
-                flush_delayed <= '0';
+                ID_EX_out.opcode        <= (others => '0');
+                ID_EX_out.rd            <= (others => '0');
+
+                EX_MEM_out.reg_we        <= '0';
+                EX_MEM_out.branch_en     <= '0';
+                EX_MEM_out.jump          <= '0';
+                EX_MEM_out.is_store_inst <= '0';
+                EX_MEM_out.rd            <= (others => '0');
+                EX_MEM_out.alu_out       <= (others => '0');
+
+                MEM_WB_out.reg_we        <= '0';
+                MEM_WB_out.rd            <= (others => '0');
+                MEM_WB_out.reg_data_src  <= (others => '0');
+
+                flush_delayed            <= '0';
             else
                 
                 flush_delayed <= flush_pipeline; 
@@ -201,7 +229,7 @@ begin
         address => loader_address,
         we => inst_ram_we
     );
-
+    
 
     ---------- IF STAGE ----------
     inst_ram_en <= not stall_pipeline;
@@ -223,7 +251,6 @@ begin
     
 
     ---------- ID STAGE ----------
-
     reg_file: entity work.reg_file
      generic map(
         ADDRESS_WIDTH => 5,
@@ -310,10 +337,9 @@ begin
         end if;
 
         case forward_A is
-            when "01" => forwarded_rs1 <= ex_mem_data; -- forwarded value from EX_MEM register
-            --forwarded value from WB stage (reg_data_in could be the ALU's output, an immediate, data from memory or the PC value, depending on the instruction)
+            when "01" => forwarded_rs1 <= ex_mem_data;
             when "10" => forwarded_rs1 <= reg_data_in; 
-            when others => forwarded_rs1 <= ID_EX_out.reg_out1; -- regular ALU insput selection
+            when others => forwarded_rs1 <= ID_EX_out.reg_out1;
         end case;
 
         case forward_B is
@@ -358,6 +384,7 @@ begin
     EX_MEM_in.branch_en <= ID_EX_out.branch_en;
     EX_MEM_in.branch_adder_result <= branch_adder_result;
     EX_MEM_in.jump <= ID_EX_out.jump;
+
 
     ---------- MEM STAGE ----------
     branch_condition_unit: entity work.branch_condition_unit
@@ -441,7 +468,7 @@ begin
         mem_writeback_data => mem_writeback_data
     );
 
-     --Determines register file input
+    --Determines register file input
     reg_input_proc: process(all)
     begin
         case MEM_WB_out.reg_data_src is

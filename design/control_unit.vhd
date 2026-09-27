@@ -53,15 +53,15 @@ begin
                 ALU_op <= instruction(14 downto 12); --funct3 field determines ALU operation
                 
                 if instruction(14 downto 12) = "101" then
-                    sub_arShift <= '1' when instruction(30) = '1' else '0'; --differentiate between logical and arithmetic shift right
+                    sub_arShift <= '1' when instruction(30) = '1' else '0'; --differentiate between logical and arithmetic shift right and betweeen add and sub
                 end if;
             
             when "01100" => --R-Type
                 reg_we <= '1';
-                ALU_op <= instruction(14 downto 12); --funct3 field determines ALU operation
+                ALU_op <= instruction(14 downto 12);
 
                 if instruction(14 downto 12) = "101" then
-                    sub_arShift <= '1' when instruction(30) = '1' else '0'; --differentiate between logical and arithmetic shift right and betweeen add and sub
+                    sub_arShift <= '1' when instruction(30) = '1' else '0';
                 end if;
 
             when "00000" => --I-Type (loads)

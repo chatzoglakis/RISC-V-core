@@ -110,13 +110,10 @@ begin
             b <= "0000";
         elsif rising_edge(clk) then
             if video_on = '1' then            
-                -- RED: Take top 3 bits, duplicate bit 7 at the bottom
                 r <= pixel_data(7 downto 5) & pixel_data(7);
                 
-                -- GREEN: Take next 3 bits, duplicate bit 4 at the bottom
                 g <= pixel_data(4 downto 2) & pixel_data(4);
-                
-                -- BLUE: Take bottom 2 bits, duplicate them to make 4 bits
+
                 b <= pixel_data(1 downto 0) & pixel_data(1 downto 0);
             else
                 r <= "0000";
