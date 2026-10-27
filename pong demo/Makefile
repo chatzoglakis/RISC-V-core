@@ -6,7 +6,7 @@ TARGET = pong
 
 all: $(TARGET).bin
 
-$(TARGET).elf: src/crt0.s src/main.c
+$(TARGET).elf: src/crt0.s src/pong.c
 	$(CC) $(CFLAGS) -T linker.ld $^ -o $@
 
 $(TARGET).bin: $(TARGET).elf
