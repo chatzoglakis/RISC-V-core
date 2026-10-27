@@ -229,7 +229,6 @@ begin
         address => loader_address,
         we => inst_ram_we
     );
-    
 
     ---------- IF STAGE ----------
     inst_ram_en <= not stall_pipeline;
@@ -325,9 +324,9 @@ begin
     alu_input_selection_proc: process(all)
         variable ex_mem_data: STD_LOGIC_VECTOR(31 downto 0);
     begin
-        -- If the instruction in EX/MEM is LUI (reg_data_src = "10"), forward its immediate
-        --If it's JAL (reg_data_src = "11"), forward the pc value
-        --otherwise forward the ALU result.
+        -- If the instruction in EX/MEM is LUI (reg_data_src = "10"), its immediate is forwarded (if needed)
+        --If it's JAL (reg_data_src = "11"), the pc value is
+        --otherwise, its the ALU result.
         if EX_MEM_out.reg_data_src = "10" then
             ex_mem_data := EX_MEM_out.immediate;
         elsif EX_MEM_out.reg_data_src = "11" then
@@ -343,7 +342,7 @@ begin
         end case;
 
         case forward_B is
-            when "01" => forwarded_rs2 <= EX_MEM_out.alu_out;
+            when "01" => forwarded_rs2 <= ex_mem_data;
             when "10" => forwarded_rs2 <= reg_data_in;
             when others => forwarded_rs2 <= ID_EX_out.reg_out2; 
         end case;
@@ -351,7 +350,7 @@ begin
 
     alu_a <= forwarded_rs1 when ID_EX_out.ALU_src1 = '0' else ID_EX_out.pc;
     alu_b <= forwarded_rs2 when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate;
-    alu_shamt <= ID_EX_out.reg_out2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
+    alu_shamt <= forwarded_rs2(4 downto 0) when ID_EX_out.ALU_src2 = '0' else ID_EX_out.immediate(4 downto 0);
 
     alu: entity work.alu
      port map(
@@ -457,6 +456,7 @@ begin
     MEM_WB_in.reg_we <= EX_MEM_out.reg_we;
     MEM_WB_in.alu_out <= EX_MEM_out.alu_out;
     MEM_WB_in.immediate <= EX_MEM_out.immediate;
+    MEM_WB_in.funct3 <= EX_MEM_out.funct3;
 
 
     ---------- WB STAGE ----------
