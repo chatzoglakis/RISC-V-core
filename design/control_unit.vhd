@@ -35,7 +35,7 @@ begin
         reg_we <= '0';
         is_store_inst <= '0';
         
-        case instruction(6 downto 2) is
+        case instruction(6 downto 2) is --Opcode
             when "01101" => --LUI
                 reg_we <= '1';
                 imm_sel <= "011";
@@ -53,15 +53,15 @@ begin
                 ALU_op <= instruction(14 downto 12); --funct3 field determines ALU operation
                 
                 if instruction(14 downto 12) = "101" then
-                    sub_arShift <= '1' when instruction(30) = '1' else '0'; --differentiate between logical and arithmetic shift right and betweeen add and sub
+                    sub_arShift <= '1' when instruction(30) = '1' else '0'; --differentiate between logical and arithmetic shift right
                 end if;
             
             when "01100" => --R-Type
                 reg_we <= '1';
-                ALU_op <= instruction(14 downto 12);
+                ALU_op <= instruction(14 downto 12); --funct3 field determines ALU operation
 
-                if instruction(14 downto 12) = "101" then
-                    sub_arShift <= '1' when instruction(30) = '1' else '0';
+                if instruction(14 downto 12) = "101" or instruction(14 downto 12) = "000" then
+                    sub_arShift <= instruction(30); --differentiate between logical and arithmetic shift right and betweeen add and sub
                 end if;
 
             when "00000" => --I-Type (loads)
@@ -95,11 +95,12 @@ begin
 
                 case instruction(14 downto 12) is
                     when "000" | "001" => --BEQ, BNE
+                        --ALU_OP = subtraction
                         ALU_op <= "000";
                         sub_arShift <= '1';
 
-                    when "100" | "101" => ALU_op <= "010"; --BLT, BGE
-                    when "110" | "111" => ALU_op <= "011"; --BLTU, BGEU
+                    when "100" | "101" => ALU_op <= "010"; --BLT, BGE: ALU_op = SLT
+                    when "110" | "111" => ALU_op <= "011"; --BLTU, BGEU: ALU_op = SLTI
                     when others => null;
                 end case;
 
